@@ -30,6 +30,18 @@ needs, built in the Scala repo so every Scala user gets them too.
 
 Dual-licensed under [MIT](LICENSE-MIT) or [Apache 2.0](LICENSE-APACHE), at your option.
 
+## Desktop 0.6 (Track A)
+
+The Basecamp module now carries the Freequencies look and the Track A tool set: month / week / board /
+timeline / venues / analytics views, drag & drop, search and filters, tags, tickets, posters, files in
+Logos Storage, notes, tasks, gear, budget, social planner, repeats, duplicate and clash warnings.
+See [ADR 0009](docs/adr/0009-track-a-on-ext-items.md). Add `FT88-Serif.otf` to
+`freequencies-ui/qml/fonts/` (see the README there).
+
+Preview without Basecamp: `pip install PySide6`, then
+`python3 freequencies-ui/qml-harness/preview/preview.py freequencies-ui/qml/FreequenciesView.qml shots ""`
+renders the view against a mock bridge with seeded Lisbon data.
+
 ## Docs
 
 - [Demo script](docs/demo.md): a six-minute walkthrough on the shared demo calendar.

@@ -10,3 +10,4 @@
 | [0006](0006-budget-from-kym.md) | A night's money is a KYM category in the crew's budget | proposed |
 | [0007](0007-crew-on-the-night.md) | The crew of a night: roles and call times on the night, people from Kith | accepted; scope vs 0001 to confirm |
 | [0008](0008-public-copy-of-a-night.md) | A public copy of a night, kept in step automatically | accepted (PoC) |
+| [0009](0009-track-a-on-ext-items.md) | Track A features ride on ext items; the desktop view takes the Freequencies look | proposed |

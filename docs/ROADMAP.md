@@ -56,3 +56,32 @@ and Android 0.3.0 (vc3) on [freequencies.vpavlin.xyz](https://freequencies.vpavl
 | Analytics (events per month, attendance, revenue) | ⬜ | |
 | Integrations: tickets, weather, venue maps | ⬜ | |
 | Public copy of a night for attendees, kept in step automatically ([ADR 0008](adr/0008-public-copy-of-a-night.md)) | 🧪 | desktop `freequencies_ui` 0.5.0 (needs `scala` 0.12.4) + Android 0.5.0 in testing |
+
+## 5. Track A in the desktop app (`freequencies_ui` 0.6.0, [ADR 0009](adr/0009-track-a-on-ext-items.md))
+
+🧪 built and checked in the offscreen preview (`freequencies-ui/qml-harness/preview`), awaiting a real
+Basecamp test. Android readers for the new ext kinds not started (⬜), so none of this counts as done yet.
+
+| Plan item | Desktop |
+|---|---|
+| Freequencies design language (Bebas Neue + FT88 Serif, acid green, ruled grid) | 🧪 |
+| Month, week, board (lanes), timeline views | 🧪 |
+| Drag & drop to move a night (and change venue/status on the board) | 🧪 |
+| Colour by status / type / venue / calendar; status badges | 🧪 |
+| Search (title, venue, artists, crew, tags, notes) and filters (status, type, tag, venue) | 🧪 |
+| Tags | 🧪 |
+| Tickets: link + sold / capacity / price | 🧪 |
+| Recurring nights (new-night form and per night) | 🧪 |
+| Permissions: your role per calendar, invite editor / viewer | 🧪 |
+| Notes (editable, never public) | 🧪 |
+| Files in Logos Storage, members-only / community flag | 🧪 |
+| Poster preview on calendar, timeline and night panel | 🧪 |
+| Venue clash warnings (plus the existing artist/crew double-booking) | 🧪 |
+| Venues view (saved once, reused, map link) | 🧪 |
+| Tasks with deadlines (amber 3 days before, red overdue), overdue count in header | 🧪 |
+| Gear checklist with presets | 🧪 |
+| Budget: lines + artist fees + ticket sales → result | 🧪 |
+| Social media planner | 🧪 |
+| Analytics: nights, attendance, revenue per month, top tags/venues | 🧪 |
+| Duplicate a night in one click | 🧪 |
+| Not yet: weather, availability polling, push notifications, ticketing API | ⬜ |

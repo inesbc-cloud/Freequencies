@@ -2,10 +2,10 @@
   "name": "freequencies_ui",
   "display_name": "Freequencies",
   "icon": "icon.png",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "type": "ui_qml",
   "category": "general",
-  "description": "Freequencies: organise club nights on top of the Scala calendar: venues, status, line-up and fees with artists from Kith, booking/crew/guest-list forms from WhisperBox, comments",
+  "description": "Freequencies: the coordination tool for Lisbon's independent culture, on the Scala calendar. Month/week/board/timeline/venues/analytics views, drag & drop, filters, tags, tickets, posters, files in Logos Storage, tasks, gear, budget, social planner; line-up from Kith, forms from WhisperBox",
   "view": "qml/FreequenciesView.qml",
   "dependencies": [
     "scala",
