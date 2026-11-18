@@ -1,0 +1,28 @@
+{
+  "name": "freequencies_ui",
+  "display_name": "Freequencies",
+  "icon": "icon.png",
+  "version": "0.5.0",
+  "type": "ui_qml",
+  "category": "general",
+  "description": "Freequencies: organise club nights on top of the Scala calendar: venues, status, line-up and fees with artists from Kith, booking/crew/guest-list forms from WhisperBox, comments",
+  "view": "qml/FreequenciesView.qml",
+  "dependencies": [
+    "scala",
+    "kith",
+    "whisperbox_core"
+  ],
+  "nix": {
+    "packages": {
+      "build": [],
+      "runtime": []
+    },
+    "external_libraries": [],
+    "cmake": {
+      "find_packages": [],
+      "extra_sources": [],
+      "extra_include_dirs": [],
+      "extra_link_libraries": []
+    }
+  }
+}
