@@ -33,6 +33,7 @@ import "fq/lib/checklist.js" as Checklist
 import "fq/lib/forms.js" as Forms
 import "fq/lib/publiccopy.js" as Pub
 import "fq/lib/duplicate.js" as Dup
+import "fq/lib/filters.js" as Filters
 import "templates.js" as Tpl
 
 Item {
@@ -675,6 +676,7 @@ Item {
             if (filterCalId !== "" && e.calendarId !== filterCalId) continue  // single-focus filter
             if (root.effHidden[e.calendarId]) continue                         // hidden calendars
             if (!root.matchesFieldFilter(e, root.activeFilter)) continue      // field filter
+            if (!Filters.matches(e, root.nightFilter)) continue               // Freequencies filters (#24)
             out.push(e)
         }
         return out
@@ -714,8 +716,8 @@ Item {
 
     // Cached expansion covering the whole visible 6×7 grid; re-evaluates when the
     // month, event set, or calendar filter changes.
-    property var monthOccurrences: root.computeMonthOccurrences(root.viewMonth, root.events, root.filterCalId, root.effHidden, root.activeFilter)
-    function computeMonthOccurrences(vm, evs, fcal, hidden, ff) {
+    property var monthOccurrences: root.computeMonthOccurrences(root.viewMonth, root.events, root.filterCalId, root.effHidden, root.activeFilter, root.nightFilter)
+    function computeMonthOccurrences(vm, evs, fcal, hidden, ff, nf) {
         var first = new Date(vm.getFullYear(), vm.getMonth(), 1)
         var offset = (first.getDay() + 6) % 7
         var firstCell = new Date(first.getFullYear(), first.getMonth(), 1 - offset)
@@ -726,6 +728,7 @@ Item {
             if (fcal !== "" && evs[i].calendarId !== fcal) continue
             if (hidden[evs[i].calendarId]) continue
             if (ff && !root.matchesFieldFilter(evs[i], ff)) continue
+            if (nf && !Filters.matches(evs[i], nf)) continue                    // Freequencies filters (#24)
             src.push(evs[i])
         }
         return root.expandEvents(src, ws, we)
@@ -806,7 +809,10 @@ Item {
         }
         return out
     }
-    readonly property var fieldChoices: root.filterChoices(root.calendars, root.effHidden)
+    // Freequencies (#24): status and type have their own filter bar above the grid; the sidebar keeps
+    // the calendars' other fields.
+    readonly property var fieldChoices: root.filterChoices(root.calendars, root.effHidden).filter(function (c) { return c.key !== "status" && c.key !== "type" })
+    property var nightFilter: Filters.empty()
     // A filter whose field/value no longer exists in a shown calendar's schema is ignored.
     readonly property var activeFilter: {
         var f = root.fieldFilter; if (!f) return null
@@ -841,7 +847,7 @@ Item {
         var src = root.expandEvents(eventsFiltered(), w[0], w[1]); var out = []
         for (var i = 0; i < src.length; i++) {
             var ev = src[i]
-            var hay = ((ev.title || "") + " " + (ev.location || "") + " " + (ev.description || "") + " " + calName(ev.calendarId)).toLowerCase()
+            var hay = ((ev.title || "") + " " + (ev.location || "") + " " + (ev.description || "") + " " + calName(ev.calendarId) + Filters.extraHay(ev)).toLowerCase()
             if (ev.fields) for (var k in ev.fields) hay += " " + String(ev.fields[k]).toLowerCase()
             if (hay.indexOf(q) >= 0) out.push(ev)
         }
@@ -1001,6 +1007,8 @@ Item {
     Header {
         id: fqHeader
         overdue: Checklist.overdueCount(root.freqNights, root.nowTick)
+        Link { text: "debug"; tone: Fq.faint; onClicked: root.openDiag() }
+        FqButton { text: "+ Night"; primary: true; onClicked: root.openNewEvent() }
         anchors.top: soonBanner.bottom; anchors.left: parent.left; anchors.right: parent.right
     }
 
@@ -1203,21 +1211,11 @@ Item {
                         onClicked: { var n = new Date(); root.viewMonth = n; root.selectedDay = n } }
                 }
                 Item { Layout.fillWidth: true }
-                Rectangle {
-                    implicitWidth: dbgT.implicitWidth + 22; implicitHeight: 30; radius: 0
-                    color: dbgMA.containsMouse ? root.cSurface : "transparent"
-                    FText { id: dbgT; anchors.centerIn: parent; text: "Debug"; color: root.cFaint; font.pixelSize: 12 }
-                    MouseArea { id: dbgMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.openDiag() }
-                }
-                Rectangle {
-                    implicitWidth: addT.implicitWidth + 30; implicitHeight: 34; radius: 0
-                    color: addMA.containsMouse ? Qt.darker(root.cBlue, 1.12) : root.cBlue
-                    FText { id: addT; anchors.centerIn: parent; text: "+ NIGHT"; color: root.cCrust; font.pixelSize: 13; font.weight: Theme.typography.weightMedium }
-                    MouseArea { id: addMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.openNewEvent() }
-                }
+                // Freequencies (#24): Debug and + Night live in the app header, so the grid gets the width.
             }
 
-            ColourBar { app: root; Layout.fillWidth: true; Layout.leftMargin: Theme.spacing.medium; Layout.rightMargin: Theme.spacing.medium; Layout.bottomMargin: 6 }
+            ColourBar { app: root; Layout.fillWidth: true; Layout.leftMargin: Theme.spacing.medium; Layout.rightMargin: Theme.spacing.medium }
+            FilterBar { app: root; Layout.fillWidth: true; Layout.leftMargin: Theme.spacing.medium; Layout.rightMargin: Theme.spacing.medium; Layout.bottomMargin: 6 }
 
             RowLayout {
                 visible: root.calMode === "month"

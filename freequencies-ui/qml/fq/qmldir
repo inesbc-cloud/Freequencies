@@ -13,3 +13,4 @@ Link 1.0 Link.qml
 NightPanel 1.0 NightPanel.qml
 Win 1.0 Win.qml
 Label_ 1.0 Label_.qml
+FilterBar 1.0 FilterBar.qml
