@@ -73,6 +73,7 @@ Rectangle {
 
                 QuickFields { app: panel.app; night: panel.night; canEdit: panel.canEdit }
                 LineupSection { app: panel.app; night: panel.night; canEdit: panel.canEdit; onEditArtist: function (b) { artistPopup.openFor(b) } }
+                CrewSection { app: panel.app; night: panel.night; canEdit: panel.canEdit; onEditCrew: function (c) { crewPopup.openFor(c) } }
                 NotesSection { app: panel.app; night: panel.night; canEdit: panel.canEdit }
             }
         }
@@ -81,4 +82,6 @@ Rectangle {
     // dialogs opened by the sections (aliased so the preview can drive them)
     property alias dlgArtist: artistPopup
     ArtistPopup { id: artistPopup; app: panel.app; night: panel.night }
+    property alias dlgCrew: crewPopup
+    CrewPopup { id: crewPopup; app: panel.app; night: panel.night }
 }

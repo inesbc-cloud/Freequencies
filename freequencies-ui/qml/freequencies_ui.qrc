@@ -30,6 +30,9 @@
         <file>fq/lib/lineup.js</file>
         <file>fq/sections/LineupSection.qml</file>
         <file>fq/popups/ArtistPopup.qml</file>
+        <file>fq/lib/crew.js</file>
+        <file>fq/sections/CrewSection.qml</file>
+        <file>fq/popups/CrewPopup.qml</file>
         <file>fonts/BebasNeue-Regular.ttf</file>
     </qresource>
 </RCC>
