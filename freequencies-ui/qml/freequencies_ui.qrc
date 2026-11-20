@@ -57,6 +57,8 @@
         <file>fq/popups/PublicPopup.qml</file>
         <file>fq/lib/duplicate.js</file>
         <file>fq/sections/RepeatSection.qml</file>
+        <file>fq/lib/timeline.js</file>
+        <file>fq/views/TimelineView.qml</file>
         <file>fonts/BebasNeue-Regular.ttf</file>
     </qresource>
 </RCC>

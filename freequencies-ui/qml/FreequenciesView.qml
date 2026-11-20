@@ -1169,6 +1169,7 @@ Item {
                 DText {
                     text: (root.calMode === "week" ? root.weekLabel(root.selectedDay)
                         : root.calMode === "board" ? root.boardLabel(root.selectedDay)
+                        : root.calMode === "timeline" ? "Timeline"
                         : root.calMode === "day" ? Qt.formatDate(root.selectedDay, "dddd, MMMM d")
                         : root.monthNames[root.viewMonth.getMonth()] + " " + root.viewMonth.getFullYear()).toUpperCase()
                     color: root.cText; font.pixelSize: 34
@@ -1181,7 +1182,7 @@ Item {
                     Row {
                         id: modeRow; anchors.centerIn: parent; spacing: 2
                         Repeater {
-                            model: [{ m: "month", t: "Month" }, { m: "week", t: "Week" }, { m: "day", t: "Day" }, { m: "board", t: "Board" }]   // Freequencies: + board (#9)
+                            model: [{ m: "month", t: "Month" }, { m: "week", t: "Week" }, { m: "day", t: "Day" }, { m: "board", t: "Board" }, { m: "timeline", t: "Timeline" }]   // Freequencies: + board (#9), timeline (#23)
                             Rectangle {
                                 width: segT.implicitWidth + 18; height: 26; radius: 0
                                 color: root.calMode === modelData.m ? root.cBlue : "transparent"
@@ -1347,6 +1348,14 @@ Item {
             // ── Freequencies board (#9): lanes by venue / status / calendar ──
             BoardView {
                 visible: root.calMode === "board"
+                app: root
+                Layout.fillWidth: true; Layout.fillHeight: true
+                Layout.leftMargin: Theme.spacing.medium; Layout.rightMargin: Theme.spacing.medium; Layout.bottomMargin: Theme.spacing.medium
+            }
+
+            // ── Freequencies timeline (#23) ──
+            TimelineView {
+                visible: root.calMode === "timeline"
                 app: root
                 Layout.fillWidth: true; Layout.fillHeight: true
                 Layout.leftMargin: Theme.spacing.medium; Layout.rightMargin: Theme.spacing.medium; Layout.bottomMargin: Theme.spacing.medium
