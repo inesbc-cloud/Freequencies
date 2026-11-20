@@ -30,6 +30,8 @@ import "fq/lib/ext.js" as Ext
 import "fq/lib/tags.js" as Tags
 import "fq/lib/poster.js" as Poster
 import "fq/lib/checklist.js" as Checklist
+import "fq/lib/forms.js" as Forms
+import "templates.js" as Tpl
 
 Item {
     id: root
@@ -444,6 +446,52 @@ Item {
             })(books[i])
         })
     }
+    // ── WhisperBox (the `whisperbox_core` module, ADR 0005): forms on nights (#20) ──
+    function wb(method, args, cb) { root.callVia("whisperbox_core", method, args, cb) }
+    property var wbForms: ({})              // formId -> form (title, questions…)
+    property var wbSummaries: ({})          // formId -> formSummary (counts only for forms I can read)
+    property string wbState: ""             // "" | "loading" | "ok" | "missing"
+    function loadWb() {
+        if (root.wbState === "loading") return
+        root.wbState = "loading"
+        root.wb("snapshot", [], function (r) {
+            var snap = root.j(r, null)
+            if (!snap || typeof snap !== "object" || !snap.state || typeof snap.state !== "object") { root.wbState = "missing"; return }
+            root.wbForms = (snap.state.forms && typeof snap.state.forms === "object") ? snap.state.forms : {}
+            root.wbState = "ok"
+            var fs = Forms.formsOf(root.selNight)
+            for (var i = 0; i < fs.length; i++) (function (fid) {
+                root.wb("formSummary", [fid], function (r2) {
+                    var sm = root.j(r2, null)
+                    if (!sm || typeof sm !== "object" || sm.ok !== true) return
+                    var m = {}; for (var k in root.wbSummaries) m[k] = root.wbSummaries[k]
+                    m[fid] = sm; root.wbSummaries = m
+                })
+            })(fs[i].formId)
+        })
+    }
+    Timer { interval: 15000; repeat: true; running: !!root.selNight && Forms.formsOf(root.selNight).length > 0; onTriggered: root.loadWb() }
+    property bool formBusy: false
+    // A form from WhisperBox's shared templates (templates.js, the same as Android's), titled for the night.
+    function addForm(night, occ, purpose, cb) {
+        if (!night || root.formBusy) return
+        var when = Qt.formatDate(new Date((occ || night).startTime), "d MMM")
+        var def = Tpl.template(purpose, { title: Forms.purposeLabel(purpose) + ": " + (night.title || "our night") + " (" + when + ")" })
+        root.formBusy = true
+        root.wb("createForm", [JSON.stringify(def)], function (r) {
+            var res = root.j(r, {})
+            if (!res || !res.ok || !res.formId) { root.formBusy = false; root.notify("Couldn't create the form" + (res && res.error ? ": " + res.error : ". Is the ‘whisperbox_core’ package installed?"), true); if (cb) cb(false); return }
+            var fid = String(res.formId)
+            root.wb("shareUri", [fid], function (r2) {
+                var su = root.j(r2, {}), uri = (su && su.ok && su.uri) ? String(su.uri) : ""
+                root.formBusy = false
+                root.postItem(night, Ext.item("form", night.id, { formId: fid, uri: uri, purpose: purpose, title: def.title }, fid),
+                              "Form created. Copy its link to share it.", function (ok) { if (ok) root.loadWb(); if (cb) cb(ok) })
+            })
+        })
+    }
+    function copyText(t) { fqClip.text = t; fqClip.selectAll(); fqClip.copy(); root.notify("Link copied") }
+    TextEdit { id: fqClip; visible: false }
     function kithName(b) {
         if (b.contact) for (var i = 0; i < root.kithArtists.length; i++) if (root.kithArtists[i].id === b.contact) return root.kithArtists[i].name
         return b.name

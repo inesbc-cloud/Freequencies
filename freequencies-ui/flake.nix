@@ -10,9 +10,11 @@
     loam_core.url = "github:vpavlin/loam-basecamp/f66ad0ac8973a314f17eca12e4ce0b9939b1a19a?dir=core";
     # Artists and crew come from Kith's books through the kith core (ADR 0004); kith 0.3.1.
     kith.url = "github:vpavlin/kith/d338a7852374bcdba40a32dcec8f399d20b078c5";
+    # Booking / crew / guest-list forms through the whisperbox_core module (ADR 0005); whisperbox_core 0.4.1.
+    whisperbox_core.url = "github:vpavlin/whisperbox-logos/accc756bca592a6d76469dc0c86fa83e740d5a2b?dir=whisperbox_core";
   };
 
-  outputs = inputs@{ logos-module-builder, scala, loam_core, kith, ... }:
+  outputs = inputs@{ logos-module-builder, scala, loam_core, kith, whisperbox_core, ... }:
     logos-module-builder.lib.mkLogosQmlModule {
       src = ./.;
       configFile = ./metadata.json;

@@ -48,6 +48,10 @@
         <file>fq/popups/ItemPopup.qml</file>
         <file>fq/lib/money.js</file>
         <file>fq/sections/BudgetSection.qml</file>
+        <file>fq/lib/forms.js</file>
+        <file>fq/sections/FormsSection.qml</file>
+        <file>fq/popups/FormPopup.qml</file>
+        <file>fq/popups/ResponsesPopup.qml</file>
         <file>fonts/BebasNeue-Regular.ttf</file>
     </qresource>
 </RCC>

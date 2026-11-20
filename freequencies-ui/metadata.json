@@ -10,7 +10,8 @@
   "dependencies": [
     "scala",
     "loam_core",
-    "kith"
+    "kith",
+    "whisperbox_core"
   ],
   "nix": {
     "packages": {

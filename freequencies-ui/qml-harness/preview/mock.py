@@ -101,6 +101,8 @@ EVENTS = [
 EVENTS[0]["ext"].append(F(E25, "public", {"calendar": "cal-pub"}, id="public:" + E25 + ":abc"))
 EVENTS[0]["ext"].append(F(E25, "file", {"cid": "zDvZRwzm2poster", "visibility": "public"}, id="file:" + E25 + ":zDvZRwzm2poster"))
 
+WB_FORMS = {}
+
 BOOKS = [{"id": "bk1", "name": "Lisbon artists"}]
 CONTACTS = {"bk1": [{"id": "k1", "name": {"display": "Perolidade"}}, {"id": "k2", "name": {"display": "Oseias"}},
                     {"id": "k3", "name": {"display": "SoundPreta"}}, {"id": "k4", "name": {"display": "Rezmorah"}},
@@ -178,7 +180,16 @@ class Bridge(QObject):
             if method == "listBooks": return BOOKS
             if method == "listContacts": return CONTACTS.get(a[0], [])
         if module == "whisperbox_core":
-            if method == "snapshot": return {"state": {"forms": {}}, "creatorView": {"responses": {}}}
+            if method == "snapshot": return {"state": {"forms": WB_FORMS}, "creatorView": {"responses": {}}}
+            if method == "createForm":
+                d = json.loads(a[0]); fid = "f-" + rid(); WB_FORMS[fid] = d; return {"ok": True, "formId": fid}
+            if method == "shareUri": return {"ok": True, "uri": "whisperbox://form/" + a[0]}
+            if method == "formSummary":
+                f = WB_FORMS.get(a[0], {}); return {"ok": True, "title": f.get("title", "Form"), "status": "open", "canRead": True, "responses": 2, "newResponses": 1}
+            if method == "getDecryptedResponses":
+                f = WB_FORMS.get(a[0], {}); qs = f.get("questions", [])
+                return {"ok": True, "responses": [{"submittedAt": int(time.time() * 1000) - 3600e3,
+                         "answers": [{"questionId": q.get("id"), "value": "Lola + 1" if i == 0 else "lola@example.org"} for i, q in enumerate(qs[:2])]}]}
         return ""
 
     @Slot(str, str, "QVariantList", QJSValue, int)
