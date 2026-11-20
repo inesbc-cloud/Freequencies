@@ -88,6 +88,7 @@ Rectangle {
                         text: Clashes.line(modelData, Qt.formatDateTime(new Date(modelData.other.startTime), "d MMM hh:mm")) }
                 }
                 QuickFields { app: panel.app; night: panel.night; canEdit: panel.canEdit }
+                DetailsSection { app: panel.app; night: panel.night; canEdit: panel.canEdit }
                 RepeatSection { app: panel.app; night: panel.night; canEdit: panel.canEdit }
                 TagsSection { app: panel.app; night: panel.night; canEdit: panel.canEdit }
                 LineupSection { app: panel.app; night: panel.night; canEdit: panel.canEdit; onEditArtist: function (b) { artistPopup.openFor(b) } }

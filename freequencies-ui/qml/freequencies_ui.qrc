@@ -67,5 +67,17 @@
         <file>fq/views/VenuesView.qml</file>
         <file>fq/views/AnalyticsView.qml</file>
         <file>fonts/BebasNeue-Regular.ttf</file>
+        <file>fq/lib/details.js</file>
+        <file>fq/lib/funding.js</file>
+        <file>fq/sections/DetailsSection.qml</file>
+        <file>fq/popups/NewNightPopup.qml</file>
+        <file>fq/popups/FundPopup.qml</file>
+        <file>fq/views/FundingView.qml</file>
+        <file>fq/lib/production.js</file>
+        <file>fq/lib/home.js</file>
+        <file>fq/sections/ProdTable.qml</file>
+        <file>fq/popups/RowPopup.qml</file>
+        <file>fq/views/ProductionView.qml</file>
+        <file>fq/views/HomeView.qml</file>
     </qresource>
 </RCC>
