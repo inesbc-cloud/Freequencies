@@ -24,6 +24,7 @@ import Logos.Theme
 import Logos.Controls
 import "fq"   // Freequencies: tokens, components, sections, views (one file each)
 import "fq/lib/nights.js" as Nights
+import "fq/lib/colour.js" as Colour
 
 Item {
     id: root
@@ -327,7 +328,29 @@ Item {
     // An event's colour IS its calendar's colour — the calendar is the event's identity here.
     // (A Freequencies-style app maps a custom-field value to colour itself; scala shows the field
     // value as a badge but keeps the event the calendar's colour — no per-event override.)
-    function evColor(ev) { return root.calColor(ev ? ev.calendarId : "") }
+    // Freequencies (#6): a night's colour follows "colour by" (status / type / venue / calendar);
+    // events of other calendars keep their calendar's colour.
+    property string colorBy: "status"
+    readonly property var fqPalette: ({ hold: Fq.hold, confirmed: Fq.confirmed, cancelled: Fq.cancelled, faint: Fq.faint, swatch: Fq.swatch })
+    function evColor(ev) {
+        var cid = ev ? ev.calendarId : ""
+        return Colour.nightColor(ev, root.colorBy, root.fqPalette, root.calColor(cid), Nights.isFreqCal(root.calById(cid)))
+    }
+    readonly property var venuesInUse: {
+        var seen = {}, out = []
+        for (var i = 0; i < root.events.length; i++) { var v = Nights.fieldOf(root.events[i], "venue").trim(); if (v && !seen[v.toLowerCase()]) { seen[v.toLowerCase()] = true; out.push(v) } }
+        return out.sort()
+    }
+    readonly property var legend: Colour.legend(root.colorBy, root.fqPalette, root.venuesInUse, root.freqCals, root.calColor)
+    // The night that's open (#8 shows it in the right pane; until then, Scala's editor opens it).
+    property var selectedNight: null
+    function openNight(occ) { root.selectedNight = occ; root.openEditEvent(occ) }
+    // Occurrences on a day, from the cached month expansion (month cells).
+    function nightsOnDay(d) {
+        var out = [], occ = root.monthOccurrences
+        for (var i = 0; i < occ.length; i++) if (root.sameDay(new Date(occ[i].startTime), d)) out.push(occ[i])
+        return out
+    }
     // Day timeline (calMode "day"): all-day band + hour-bucketed schedule for a day.
     function dayAllDay(d) { var a = root.eventsOnDay(d); var out = []; for (var i = 0; i < a.length; i++) if (a[i].allDay) out.push(a[i]); return out }
     function dayTimeline(d) {
@@ -935,10 +958,12 @@ Item {
                 Rectangle {
                     implicitWidth: addT.implicitWidth + 30; implicitHeight: 34; radius: 0
                     color: addMA.containsMouse ? Qt.darker(root.cBlue, 1.12) : root.cBlue
-                    FText { id: addT; anchors.centerIn: parent; text: "+ Event"; color: root.cCrust; font.pixelSize: 13; font.weight: Theme.typography.weightMedium }
+                    FText { id: addT; anchors.centerIn: parent; text: "+ NIGHT"; color: root.cCrust; font.pixelSize: 13; font.weight: Theme.typography.weightMedium }
                     MouseArea { id: addMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.openNewEvent() }
                 }
             }
+
+            ColourBar { app: root; Layout.fillWidth: true; Layout.leftMargin: Theme.spacing.medium; Layout.rightMargin: Theme.spacing.medium }
 
             RowLayout {
                 visible: root.calMode === "month"
@@ -971,12 +996,14 @@ Item {
                         property bool inMonth: cellDate.getMonth() === root.viewMonth.getMonth()
                         property bool isToday: root.sameDay(cellDate, new Date())
                         property bool isSel: root.sameDay(cellDate, root.selectedDay)
+                        readonly property int cap: Math.max(1, Math.floor((height - 36) / 25))
                         color: isSel ? root.cSurface : (cellMA.containsMouse ? root.cMantle : "transparent")
-                        border.width: isSel ? 1 : 0
-                        border.color: root.cBlue
+                        border.width: 1
+                        border.color: isSel ? root.cBlue : root.cLine
 
                         Column {
-                            anchors.left: parent.left; anchors.top: parent.top; anchors.right: parent.right; anchors.margins: 7; spacing: 4
+                            z: 2   // Freequencies: night cards sit above the cell's own click area
+                            anchors.left: parent.left; anchors.top: parent.top; anchors.right: parent.right; anchors.margins: 7; spacing: 3
                             // today = a filled accent circle behind the date (Google-style); else a plain number
                             Rectangle {
                                 width: 22; height: 22; radius: 0
@@ -989,12 +1016,16 @@ Item {
                                     font.weight: cell.isToday ? Theme.typography.weightMedium : Font.Normal
                                 }
                             }
-                            Row {
-                                spacing: 3
-                                Repeater {
-                                    model: root.dotsOnDay(cell.cellDate)
-                                    Rectangle { width: 6; height: 6; radius: 0; color: modelData }
-                                }
+                            // Freequencies (#6): the nights themselves, not dots; "+N more" opens the week.
+                            Repeater {
+                                model: { var xs = root.nightsOnDay(cell.cellDate); return xs.length > cell.cap ? xs.slice(0, cell.cap - 1) : xs }
+                                delegate: NightCard { required property var modelData; app: root; occ: modelData; compact: true; width: cell.width - 14 }
+                            }
+                            FText {
+                                readonly property int n: root.nightsOnDay(cell.cellDate).length
+                                visible: n > cell.cap; text: "+" + (n - cell.cap + 1) + " more"; color: root.cAcid; font.pixelSize: 12
+                                MouseArea { anchors.fill: parent; anchors.margins: -3; cursorShape: Qt.PointingHandCursor
+                                    onClicked: { root.selectedDay = cell.cellDate; root.calMode = "week" } }
                             }
                         }
                         MouseArea { id: cellMA; anchors.fill: parent; hoverEnabled: true; onClicked: root.selectedDay = cell.cellDate }
@@ -1040,20 +1071,8 @@ Item {
                             ListView {
                                 Layout.fillWidth: true; Layout.fillHeight: true; clip: true; spacing: 3
                                 model: root.eventsOnDay(modelData)
-                                delegate: Rectangle {
-                                    width: ListView.view.width; implicitHeight: 34; radius: 0
-                                    color: wkEvMA.containsMouse ? root.cSurface2 : root.cSurface
-                                    RowLayout {
-                                        anchors.fill: parent; anchors.leftMargin: 5; anchors.rightMargin: 5; spacing: 4
-                                        Rectangle { width: 3; height: 22; radius: 0; color: root.evColor(modelData); Layout.alignment: Qt.AlignVCenter }
-                                        ColumnLayout {
-                                            Layout.fillWidth: true; spacing: 0
-                                            FText { text: root.clashMark(modelData) + root.rsvpMark(modelData) + (modelData.title || "(untitled)"); color: root.myRsvpOf(modelData) === "no" ? root.cSub : root.cText; font.strikeout: root.myRsvpOf(modelData) === "no"; font.pixelSize: 12; elide: Text.ElideRight; Layout.fillWidth: true }
-                                            FText { text: root.fmtTime(modelData.startTime); color: root.cSub; font.pixelSize: 12; elide: Text.ElideRight; Layout.fillWidth: true }
-                                        }
-                                    }
-                                    MouseArea { id: wkEvMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.openEditEvent(modelData) }
-                                }
+                                // Freequencies (#6): full night cards
+                                delegate: NightCard { required property var modelData; app: root; occ: modelData; width: ListView.view.width }
                             }
                             FText {
                                 text: "+"; color: root.cFaint; font.pixelSize: 16; Layout.alignment: Qt.AlignHCenter

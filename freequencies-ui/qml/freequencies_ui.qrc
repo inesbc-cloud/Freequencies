@@ -12,6 +12,9 @@
         <file>fq/DText.qml</file>
         <file>fq/OtherCalendars.qml</file>
         <file>fq/lib/nights.js</file>
+        <file>fq/lib/colour.js</file>
+        <file>fq/NightCard.qml</file>
+        <file>fq/ColourBar.qml</file>
         <file>fonts/BebasNeue-Regular.ttf</file>
     </qresource>
 </RCC>

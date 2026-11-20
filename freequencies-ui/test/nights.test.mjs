@@ -11,7 +11,7 @@ test("nights: a calendar with the Freequencies status field is a Freequencies ca
 });
 test("nights: adopting keeps the calendar's own fields and adds the three", () => {
   const s = N.adoptedSchema([{ key: "door", type: "number" }, { key: "venue", type: "text", label: "Where" }]);
-  assert.deepEqual(s.map((f) => f.key), ["door", "venue", "status", "type"]);
+  assert.equal(s.map((f) => f.key).join(), "door,venue,status,type");
   assert.equal(s[1].label, "Where");
 });
 test("nights: adoptBlocker explains why not", () => {

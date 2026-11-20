@@ -17,3 +17,5 @@ export function load(name) {
   cache.set(name, ctx);
   return ctx;
 }
+// Values from a library live in another realm: compare them as plain JSON.
+export const plain = (x) => JSON.parse(JSON.stringify(x));
