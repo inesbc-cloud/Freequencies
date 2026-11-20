@@ -52,6 +52,9 @@
         <file>fq/sections/FormsSection.qml</file>
         <file>fq/popups/FormPopup.qml</file>
         <file>fq/popups/ResponsesPopup.qml</file>
+        <file>fq/lib/publiccopy.js</file>
+        <file>fq/sections/PublicSection.qml</file>
+        <file>fq/popups/PublicPopup.qml</file>
         <file>fonts/BebasNeue-Regular.ttf</file>
     </qresource>
 </RCC>

@@ -31,6 +31,7 @@ import "fq/lib/tags.js" as Tags
 import "fq/lib/poster.js" as Poster
 import "fq/lib/checklist.js" as Checklist
 import "fq/lib/forms.js" as Forms
+import "fq/lib/publiccopy.js" as Pub
 import "templates.js" as Tpl
 
 Item {
@@ -492,6 +493,52 @@ Item {
     }
     function copyText(t) { fqClip.text = t; fqClip.selectAll(); fqClip.copy(); root.notify("Link copied") }
     TextEdit { id: fqClip; visible: false }
+    // ── public copies (#21, ADR 0008): after every refresh, bring each published night's copy up to
+    // date (fq/lib/publiccopy.js, identical to Android's). Only owners/editors of the public calendar write.
+    function isPublicTarget(calId) { var c = root.calById(calId); return !!c && !Nights.isFreqCal(c) }
+    readonly property var publicTargets: root.calendars.filter(function (c) { return !Nights.isFreqCal(c) && Nights.isEditorOf(c) && c.open === false })
+    property var mirrorBlocked: ({})
+    property var lastWritten: ({})
+    property bool mirroring: false
+    property bool putMissing: false          // scala core older than 0.12.4: no putEvent
+    onEventsChanged: Qt.callLater(root.runMirror)
+    function runMirror() {
+        if (root.mirroring || root.putMissing) return
+        var plan = Pub.mirrorPlan(root.freqNights, root.events, root.isPublicTarget), blocked = {}, todo = []
+        for (var i = 0; i < plan.length; i++) {
+            var w = plan[i]
+            if (!Nights.isEditorOf(root.calById(w.calendarId))) { blocked[w.nightId] = true; continue }
+            var sig = JSON.stringify(Pub.copyToEvent(w.copy))
+            if (root.lastWritten[w.id + "@" + w.calendarId] !== sig) todo.push({ w: w, sig: sig })
+        }
+        root.mirrorBlocked = blocked
+        if (!todo.length) return
+        root.mirroring = true
+        var left = todo.length
+        for (var t = 0; t < todo.length; t++) (function (job) {
+            root.coreAsync("putEvent", [job.w.calendarId, job.w.id, JSON.stringify(Pub.copyToEvent(job.w.copy))], function (r) {
+                if (r === "" || r === undefined || r === null) root.putMissing = true
+                if (root.unq(r) === job.w.id || String(root.j(r, "")) === job.w.id) {
+                    var m = {}; for (var k in root.lastWritten) m[k] = root.lastWritten[k]; m[job.w.id + "@" + job.w.calendarId] = job.sig; root.lastWritten = m
+                }
+                if (--left === 0) { root.mirroring = false; root.refresh() }
+            })
+        })(todo[t])
+    }
+    function newPublicCalendar(night, cb) {
+        var cal = night ? root.calById(night.calendarId) : null
+        root.coreAsync("createCalendar", [((cal && cal.name) || "Our nights") + " (public)", (cal && cal.color) || "#6ef600", ""], function (r) {
+            var id = root.unq(r) || String(root.j(r, "") || "")
+            if (!id) { root.notify("Couldn't create the calendar.", true); cb(""); return }
+            root.coreAsync("updateCalendarMeta", [id, JSON.stringify({ open: false, description: "What's on. Published from Freequencies." })], function () { cb(id) })
+        })
+    }
+    function copyInvite(calId, role) {
+        root.coreAsync("createInvite", [calId, role], function (r) {
+            var res = root.j(r, {})
+            if (res && res.ok && res.link) root.copyText(String(res.link)); else root.notify("Couldn't make a link" + (res && res.error ? ": " + res.error : "."), true)
+        })
+    }
     function kithName(b) {
         if (b.contact) for (var i = 0; i < root.kithArtists.length; i++) if (root.kithArtists[i].id === b.contact) return root.kithArtists[i].name
         return b.name
@@ -561,8 +608,16 @@ Item {
     function isFreqCal(c) { return Nights.isFreqCal(c) }
     function isEditorOf(c) { return Nights.isEditorOf(c) }
     function canEditNight(ev) { return Nights.canEdit(ev, ev ? root.calById(ev.calendarId) : null) }
-    function adoptCalendar(c) {
+    // Why a calendar can't be adopted: Nights' rules, plus: it holds public copies (#21).
+    function adoptReason(c) {
         var why = Nights.adoptBlocker(c)
+        if (why) return why
+        for (var i = 0; i < root.events.length; i++) if (root.events[i].calendarId === c.id && String(root.events[i].id).indexOf("pub-") === 0)
+            return "Holds public copies of nights, so it stays a public calendar"
+        return ""
+    }
+    function adoptCalendar(c) {
+        var why = root.adoptReason(c)
         if (why) { root.notify(why + ".", true); return }
         root.coreAsync("updateCalendarMeta", [c.id, JSON.stringify({ schema: Nights.adoptedSchema(c.schema) })], function (r) {
             if (root.j(r, false) === true || String(r) === "true") {

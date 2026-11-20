@@ -15,7 +15,7 @@ ColumnLayout {
         delegate: ColumnLayout {
             id: row
             required property var modelData
-            readonly property string why: Nights.adoptBlocker(modelData)
+            readonly property string why: oc.app.adoptReason(modelData)
             Layout.fillWidth: true; spacing: 1
             RowLayout {
                 Layout.fillWidth: true; spacing: 8

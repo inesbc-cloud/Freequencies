@@ -119,6 +119,7 @@ Rectangle {
                     tone: function (it) { return Checklist.postDueSoon(it, Date.now()) ? Fq.warn : Fq.sub }
                     onEditItem: function (k, it) { itemPopup.openFor(k, it) }
                 }
+                PublicSection { app: panel.app; night: panel.night; canEdit: panel.canEdit; onMakePublic: publicPopup.open() }
                 FormsSection { app: panel.app; night: panel.night; canEdit: panel.canEdit; onAddForm: formPopup.open(); onOpenAnswers: function (f) { responsesPopup.openFor(f) } }
                 NotesSection { app: panel.app; night: panel.night; canEdit: panel.canEdit }
             }
@@ -139,5 +140,7 @@ Rectangle {
     property alias dlgForm: formPopup
     FormPopup { id: formPopup; app: panel.app; night: panel.night; occ: panel.occ }
     ResponsesPopup { id: responsesPopup; app: panel.app }
+    property alias dlgPublic: publicPopup
+    PublicPopup { id: publicPopup; app: panel.app; night: panel.night }
     FileDialog { id: fileDialog; title: "Attach a file to this night"; onAccepted: panel.app.uploadToNight(panel.night, fileDialog.selectedFile) }
 }
