@@ -74,6 +74,7 @@ Rectangle {
                 QuickFields { app: panel.app; night: panel.night; canEdit: panel.canEdit }
                 TagsSection { app: panel.app; night: panel.night; canEdit: panel.canEdit }
                 LineupSection { app: panel.app; night: panel.night; canEdit: panel.canEdit; onEditArtist: function (b) { artistPopup.openFor(b) } }
+                TicketsSection { app: panel.app; night: panel.night; canEdit: panel.canEdit; onEditTickets: ticketsPopup.openFor() }
                 CrewSection { app: panel.app; night: panel.night; canEdit: panel.canEdit; onEditCrew: function (c) { crewPopup.openFor(c) } }
                 NotesSection { app: panel.app; night: panel.night; canEdit: panel.canEdit }
             }
@@ -85,4 +86,6 @@ Rectangle {
     ArtistPopup { id: artistPopup; app: panel.app; night: panel.night }
     property alias dlgCrew: crewPopup
     CrewPopup { id: crewPopup; app: panel.app; night: panel.night }
+    property alias dlgTickets: ticketsPopup
+    TicketsPopup { id: ticketsPopup; app: panel.app; night: panel.night }
 }
