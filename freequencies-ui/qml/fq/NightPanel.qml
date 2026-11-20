@@ -110,6 +110,15 @@ Rectangle {
                                 onClicked: panel.app.postItem(panel.night, { ns: "xyz.freequencies", kind: "gear", target: panel.night.id, data: { item: modelData, done: false } }, "") } }
                     }
                 }
+                ChecklistSection {
+                    app: panel.app; night: panel.night; canEdit: panel.canEdit
+                    kind: "post"; label: "Social posts"; addLabel: "+ post"
+                    items: Checklist.postsOf(panel.night)
+                    emptyText: "Plan what goes out and when: announcement, line-up reveal, day-of stories, recap."
+                    meta: function (it) { return [it.d.channel || "", it.d.when ? Qt.formatDateTime(new Date(it.d.when), "ddd d MMM hh:mm") : "unscheduled"].join(" · ") }
+                    tone: function (it) { return Checklist.postDueSoon(it, Date.now()) ? Fq.warn : Fq.sub }
+                    onEditItem: function (k, it) { itemPopup.openFor(k, it) }
+                }
                 NotesSection { app: panel.app; night: panel.night; canEdit: panel.canEdit }
             }
         }

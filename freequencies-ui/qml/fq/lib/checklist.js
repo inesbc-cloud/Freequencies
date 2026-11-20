@@ -26,6 +26,7 @@ function parse(kind, text, when, extra) {
     var d
     if (kind === "task") { d = { text: text, cat: extra.cat || "other", done: extra.done === true }; if (when !== null) d.due = when }
     else if (kind === "gear") d = { item: text, done: extra.done === true }
+    else if (kind === "post") { d = { text: text, channel: extra.channel || "Instagram", done: extra.done === true }; if (when !== null) d.when = when }
     else return { error: "Unknown kind " + kind }
     return { data: d }
 }
@@ -46,3 +47,12 @@ function missingPresets(ev, n) {
         return !have.some(function (h) { return h.indexOf(k) >= 0 })
     }).slice(0, n)
 }
+
+// ── social posts (#19): ext kind "post" {text, when?, channel, done}
+var channels = ["Instagram", "Luma", "X", "Newsletter", "Radio", "Other"]
+function postsOf(ev) {
+    var xs = Ext.itemsOf(ev, "post")
+    xs.sort(function (a, b) { return (Ext.num(a.d.when) || 9e15) - (Ext.num(b.d.when) || 9e15) })
+    return xs
+}
+function postDueSoon(it, now) { return it.d.done !== true && Ext.num(it.d.when) !== null && it.d.when >= now && it.d.when < now + DAY }

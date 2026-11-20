@@ -22,3 +22,10 @@ test("gear: unpacked first, packed count, presets not on the list", () => {
   assert.ok(!miss.includes("CDJs") && !miss.includes("Projector") && miss.includes("Mixer"));
   assert.equal(C.parse("gear", "Mics", null, { done: true }).data.item, "Mics");
 });
+
+test("posts: by time, unscheduled last, channel kept", () => {
+  const n = night("a", { ext: [ext("post", "a", { text: "recap" }), ext("post", "a", { text: "reveal", when: now + 2 * DAY, channel: "Luma" }), ext("post", "a", { text: "day-of", when: now + 3600e3 })] });
+  assert.equal(C.postsOf(n).map((p) => p.d.text).join(), "day-of,reveal,recap");
+  assert.equal(C.postDueSoon(C.postsOf(n)[0], now), true);
+  assert.equal(C.parse("post", "x", 7, { channel: "Radio" }).data.channel, "Radio");
+});

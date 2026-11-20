@@ -16,6 +16,7 @@ Win {
     property string cat: "other"
     property bool done: false
     property string dir: "out"             // budget lines (#18)
+    property string channel: "Instagram"   // social posts (#19)
     readonly property var labels: ({ task: "task", gear: "gear", budget: "budget_line", post: "social_post" })
     title: (id_ ? "" : "new_") + (labels[kind] || "item") + ".exe"
     // The date and time fields read and write local time.
@@ -38,10 +39,10 @@ Win {
         open(); textIn.forceActiveFocus()
     }
     function extraOpen(d) {
-        dir = d.dir === "in" ? "in" : "out"
+        dir = d.dir === "in" ? "in" : "out"; channel = d.channel || "Instagram"
         amountIn.text = Ext.num(d.amount) !== null ? String(d.amount) : ""; curIn.text = d.currency || "EUR"
     }
-    function extraData() { return ({ cat: cat, done: done }) }
+    function extraData() { return ({ cat: cat, done: done, channel: channel }) }
     function save() {
         var w = whenOf()
         if (w === undefined) { app.notify("Use a date like 2026-11-24 and a time like 18:00.", true); return }
@@ -53,15 +54,17 @@ Win {
     Label_ { text: ip.kind === "gear" ? "ITEM" : ip.kind === "post" ? "POST" : ip.kind === "budget" ? "WHAT" : "TASK" }
     Field { id: textIn; Layout.fillWidth: true; onAccepted: ip.save() }
     ColumnLayout {
-        visible: ip.kind === "task"; Layout.fillWidth: true; spacing: 7
+        visible: ip.kind === "task" || ip.kind === "post"; Layout.fillWidth: true; spacing: 7
         RowLayout {
             Layout.fillWidth: true; spacing: 8
-            ColumnLayout { Layout.fillWidth: true; spacing: 4; Label_ { text: "DEADLINE" } Field { id: dateIn; Layout.fillWidth: true; placeholderText: "2026-11-24" } }
+            ColumnLayout { Layout.fillWidth: true; spacing: 4; Label_ { text: ip.kind === "post" ? "GOES OUT ON" : "DEADLINE" } Field { id: dateIn; Layout.fillWidth: true; placeholderText: "2026-11-24" } }
             ColumnLayout { spacing: 4; Label_ { text: "AT" } Field { id: timeIn; Layout.preferredWidth: 90 } }
         }
-        Label_ { text: "KIND" }
+        Label_ { text: ip.kind === "post" ? "CHANNEL" : "KIND" }
         Flow { Layout.fillWidth: true; spacing: 6
-            Repeater { model: Checklist.taskCats; delegate: Chip { required property var modelData; text: modelData; on: ip.cat === modelData; onClicked: ip.cat = modelData } } }
+            Repeater { model: ip.kind === "post" ? Checklist.channels : Checklist.taskCats
+                delegate: Chip { required property var modelData; text: modelData; on: ip.kind === "post" ? ip.channel === modelData : ip.cat === modelData
+                    onClicked: { if (ip.kind === "post") ip.channel = modelData; else ip.cat = modelData } } } }
     }
     ColumnLayout {
         visible: ip.kind === "budget"; Layout.fillWidth: true; spacing: 7
@@ -75,7 +78,7 @@ Win {
         }
     }
     Flow { visible: ip.kind !== "budget"; Layout.fillWidth: true; spacing: 6
-        Chip { text: "Done"; on: ip.done; onClicked: ip.done = !ip.done } }
+        Chip { text: ip.kind === "gear" ? "Packed" : ip.kind === "post" ? "Posted" : "Done"; on: ip.done; onClicked: ip.done = !ip.done } }
     RowLayout {
         Layout.fillWidth: true; Layout.topMargin: 8; spacing: 8
         FqButton { visible: ip.id_ !== ""; text: "Remove"; onClicked: ip.app.deleteItem(ip.night, ip.id_, "Removed", function (ok) { if (ok) ip.close() }) }
