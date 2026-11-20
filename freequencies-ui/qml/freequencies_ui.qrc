@@ -43,6 +43,9 @@
         <file>fq/lib/poster.js</file>
         <file>fq/sections/PosterSection.qml</file>
         <file>fq/popups/PosterPopup.qml</file>
+        <file>fq/lib/checklist.js</file>
+        <file>fq/sections/ChecklistSection.qml</file>
+        <file>fq/popups/ItemPopup.qml</file>
         <file>fonts/BebasNeue-Regular.ttf</file>
     </qresource>
 </RCC>

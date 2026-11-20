@@ -5,6 +5,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Dialogs
 import "lib/nights.js" as Nights
+import "lib/checklist.js" as Checklist
 import "sections"
 import "popups"
 
@@ -86,6 +87,15 @@ Rectangle {
                 PosterSection { app: panel.app; night: panel.night; canEdit: panel.canEdit; onChange: posterPopup.openFor() }
                 FilesSection { app: panel.app; night: panel.night; canEdit: panel.canEdit; onUpload: fileDialog.open() }
                 CrewSection { app: panel.app; night: panel.night; canEdit: panel.canEdit; onEditCrew: function (c) { crewPopup.openFor(c) } }
+                ChecklistSection {
+                    app: panel.app; night: panel.night; canEdit: panel.canEdit
+                    kind: "task"; label: "Tasks (" + Checklist.openCount(panel.night) + " open)"; addLabel: "+ task"
+                    items: Checklist.tasksOf(panel.night)
+                    emptyText: "Book artists, announce, print posters, pay the deposit… Deadlines turn amber three days before and red when overdue."
+                    meta: function (it) { return [Checklist.overdue(it, Date.now()) ? "OVERDUE" : "", it.d.due ? "due " + Qt.formatDateTime(new Date(it.d.due), "ddd d MMM hh:mm") : "", it.d.cat || ""].filter(function (x) { return !!x }).join(" · ") }
+                    tone: function (it) { return Checklist.overdue(it, Date.now()) ? Fq.red : Checklist.dueSoon(it, Date.now()) ? Fq.warn : Fq.sub }
+                    onEditItem: function (k, it) { itemPopup.openFor(k, it) }
+                }
                 NotesSection { app: panel.app; night: panel.night; canEdit: panel.canEdit }
             }
         }
@@ -100,5 +110,7 @@ Rectangle {
     TicketsPopup { id: ticketsPopup; app: panel.app; night: panel.night }
     property alias dlgPoster: posterPopup
     PosterPopup { id: posterPopup; app: panel.app; night: panel.night }
+    property alias dlgItem: itemPopup
+    ItemPopup { id: itemPopup; app: panel.app; night: panel.night }
     FileDialog { id: fileDialog; title: "Attach a file to this night"; onAccepted: panel.app.uploadToNight(panel.night, fileDialog.selectedFile) }
 }

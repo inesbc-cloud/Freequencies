@@ -29,6 +29,7 @@ import "fq/lib/colour.js" as Colour
 import "fq/lib/ext.js" as Ext
 import "fq/lib/tags.js" as Tags
 import "fq/lib/poster.js" as Poster
+import "fq/lib/checklist.js" as Checklist
 
 Item {
     id: root
@@ -416,6 +417,8 @@ Item {
     readonly property var freqNights: { var ids = {}; for (var i = 0; i < root.freqCals.length; i++) ids[root.freqCals[i].id] = true
                                         return root.events.filter(function (e) { return !!ids[e.calendarId] }) }
     readonly property var allTags: Tags.allTags(root.freqNights)
+    property double nowTick: Date.now()                    // re-evaluates deadlines once a minute
+    Timer { interval: 60000; repeat: true; running: true; onTriggered: root.nowTick = Date.now() }
     function bookingColor(st) { return st === "confirmed" ? Fq.confirmed : st === "cancelled" ? Fq.cancelled : Fq.hold }
     // ── Kith (the `kith` core module, ADR 0004): every book's contacts, read when a picker opens ──
     property var kithArtists: []             // [{bookId, id, name}]
@@ -869,6 +872,7 @@ Item {
     // Freequencies header (fq/Header.qml)
     Header {
         id: fqHeader
+        overdue: Checklist.overdueCount(root.freqNights, root.nowTick)
         anchors.top: soonBanner.bottom; anchors.left: parent.left; anchors.right: parent.right
     }
 
