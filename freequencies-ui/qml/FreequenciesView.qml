@@ -34,6 +34,7 @@ import "fq/lib/forms.js" as Forms
 import "fq/lib/publiccopy.js" as Pub
 import "fq/lib/duplicate.js" as Dup
 import "fq/lib/filters.js" as Filters
+import "fq/lib/clashes.js" as Clashes
 import "templates.js" as Tpl
 
 Item {
@@ -761,7 +762,17 @@ Item {
     // A filter hides events, not clashes: compare against the unfiltered month.
     property var clashMap: root.findClashes(root.computeMonthOccurrences(root.viewMonth, root.events, root.filterCalId, root.effHidden, null))
     function clashesOf(ev) { return (ev && ev.seriesId !== undefined && root.clashMap[root.occKey(ev)]) || [] }
-    function clashMark(ev) { var n = root.clashesOf(ev).length; return n ? "⚠ " : "" }
+    function clashMark(ev) { var n = root.clashesOf(ev).length + root.nightClashesOf(ev).length; return n ? "⚠ " : "" }
+    // Freequencies (#25): venue double-booked, artist or crew in two places, across all Freequencies
+    // calendars, over the month grid and the board's two weeks (unfiltered, like Scala's).
+    readonly property var nightClashMap: {
+        var first = new Date(root.viewMonth.getFullYear(), root.viewMonth.getMonth(), 1)
+        var a = new Date(first.getFullYear(), first.getMonth(), 1 - ((first.getDay() + 6) % 7) - 14).getTime(), b = a + 84 * 864e5
+        var sd = new Date(root.selectedDay); sd.setHours(0, 0, 0, 0)
+        a = Math.min(a, sd.getTime() - 14 * 864e5); b = Math.max(b, sd.getTime() + 21 * 864e5)
+        return Clashes.clashes(root.expandEvents(root.freqNights, a, b))
+    }
+    function nightClashesOf(ev) { return (ev && ev.seriesId !== undefined && root.nightClashMap[Clashes.occKey(ev)]) || [] }
 
     function eventsOnDay(d) {
         var ds = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0).getTime()

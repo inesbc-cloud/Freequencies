@@ -61,6 +61,7 @@
         <file>fq/views/TimelineView.qml</file>
         <file>fq/lib/filters.js</file>
         <file>fq/FilterBar.qml</file>
+        <file>fq/lib/clashes.js</file>
         <file>fonts/BebasNeue-Regular.ttf</file>
     </qresource>
 </RCC>

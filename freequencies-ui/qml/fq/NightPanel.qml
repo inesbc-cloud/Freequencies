@@ -6,6 +6,7 @@ import QtQuick.Layouts
 import QtQuick.Dialogs
 import "lib/nights.js" as Nights
 import "lib/checklist.js" as Checklist
+import "lib/clashes.js" as Clashes
 import "sections"
 import "popups"
 
@@ -81,6 +82,11 @@ Rectangle {
                 FText { visible: !!panel.night && !panel.canEdit; Layout.fillWidth: true; Layout.topMargin: 8; wrapMode: Text.Wrap; color: Fq.warn; font.pixelSize: 12
                     text: "Read-only: you're a " + Nights.roleOf(panel.cal) + " on this calendar." }
 
+                Repeater {   // clash warnings (#25)
+                    model: panel.occ ? panel.app.nightClashesOf(panel.occ) : []
+                    delegate: FText { required property var modelData; Layout.fillWidth: true; Layout.topMargin: 6; wrapMode: Text.Wrap; color: Fq.warn; font.pixelSize: 12
+                        text: Clashes.line(modelData, Qt.formatDateTime(new Date(modelData.other.startTime), "d MMM hh:mm")) }
+                }
                 QuickFields { app: panel.app; night: panel.night; canEdit: panel.canEdit }
                 RepeatSection { app: panel.app; night: panel.night; canEdit: panel.canEdit }
                 TagsSection { app: panel.app; night: panel.night; canEdit: panel.canEdit }
