@@ -1018,6 +1018,9 @@ Item {
     Header {
         id: fqHeader
         overdue: Checklist.overdueCount(root.freqNights, root.nowTick)
+        // overviews (#26, #27): beside the calendar modes, so the mode switch stays short
+        FqButton { text: "Venues"; primary: root.calMode === "venues"; onClicked: root.calMode = "venues" }
+        FqButton { text: "Analytics"; primary: root.calMode === "stats"; onClicked: root.calMode = "stats" }
         Link { text: "debug"; tone: Fq.faint; onClicked: root.openDiag() }
         FqButton { text: "+ Night"; primary: true; onClicked: root.openNewEvent() }
         anchors.top: soonBanner.bottom; anchors.left: parent.left; anchors.right: parent.right
@@ -1189,6 +1192,8 @@ Item {
                     text: (root.calMode === "week" ? root.weekLabel(root.selectedDay)
                         : root.calMode === "board" ? root.boardLabel(root.selectedDay)
                         : root.calMode === "timeline" ? "Timeline"
+                        : root.calMode === "venues" ? "Venues"
+                        : root.calMode === "stats" ? "Analytics"
                         : root.calMode === "day" ? Qt.formatDate(root.selectedDay, "dddd, MMMM d")
                         : root.monthNames[root.viewMonth.getMonth()] + " " + root.viewMonth.getFullYear()).toUpperCase()
                     color: root.cText; font.pixelSize: 34
@@ -1225,7 +1230,7 @@ Item {
                 // Freequencies (#24): Debug and + Night live in the app header, so the grid gets the width.
             }
 
-            ColourBar { app: root; Layout.fillWidth: true; Layout.leftMargin: Theme.spacing.medium; Layout.rightMargin: Theme.spacing.medium }
+            ColourBar { app: root; visible: root.calMode !== "venues" && root.calMode !== "stats"; Layout.fillWidth: true; Layout.leftMargin: Theme.spacing.medium; Layout.rightMargin: Theme.spacing.medium }
             FilterBar { app: root; Layout.fillWidth: true; Layout.leftMargin: Theme.spacing.medium; Layout.rightMargin: Theme.spacing.medium; Layout.bottomMargin: 6 }
 
             RowLayout {
@@ -1366,6 +1371,18 @@ Item {
             TimelineView {
                 visible: root.calMode === "timeline"
                 app: root
+                Layout.fillWidth: true; Layout.fillHeight: true
+                Layout.leftMargin: Theme.spacing.medium; Layout.rightMargin: Theme.spacing.medium; Layout.bottomMargin: Theme.spacing.medium
+            }
+
+            // ── Freequencies overviews: venues (#26), analytics (#27) ──
+            VenuesView {
+                visible: root.calMode === "venues"; app: root
+                Layout.fillWidth: true; Layout.fillHeight: true
+                Layout.leftMargin: Theme.spacing.medium; Layout.rightMargin: Theme.spacing.medium; Layout.bottomMargin: Theme.spacing.medium
+            }
+            AnalyticsView {
+                visible: root.calMode === "stats"; app: root
                 Layout.fillWidth: true; Layout.fillHeight: true
                 Layout.leftMargin: Theme.spacing.medium; Layout.rightMargin: Theme.spacing.medium; Layout.bottomMargin: Theme.spacing.medium
             }

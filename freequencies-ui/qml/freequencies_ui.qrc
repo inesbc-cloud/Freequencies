@@ -62,6 +62,10 @@
         <file>fq/lib/filters.js</file>
         <file>fq/FilterBar.qml</file>
         <file>fq/lib/clashes.js</file>
+        <file>fq/lib/venues.js</file>
+        <file>fq/lib/analytics.js</file>
+        <file>fq/views/VenuesView.qml</file>
+        <file>fq/views/AnalyticsView.qml</file>
         <file>fonts/BebasNeue-Regular.ttf</file>
     </qresource>
 </RCC>
