@@ -1722,6 +1722,7 @@ Item {
                     }
                     Input {
                         id: searchBox
+                        objectName: "searchBox"
                         Layout.preferredWidth: 280; placeholderText: "Search nights, artists, crew, tags…"
                         onTextChanged: root.q = text
                     }
@@ -1844,6 +1845,7 @@ Item {
                 // MONTH ─────────────────────────────────────────────────────────
                 Item {
                     id: monthView
+                    objectName: "monthView"
                     readonly property real cw: width / 7
                     readonly property real ch: (height - 30) / 6
                     Row {
@@ -1993,6 +1995,7 @@ Item {
                 // TIMELINE ──────────────────────────────────────────────────────
                 Flickable {
                     id: tlFlick
+                    objectName: "tlFlick"
                     clip: true; contentWidth: width; contentHeight: tlCol.implicitHeight + 40
                     ScrollBar.vertical: ScrollBar {}
                     ColumnLayout {
@@ -2118,6 +2121,7 @@ Item {
                 // ANALYTICS ─────────────────────────────────────────────────────
                 Flickable {
                     id: stFlick
+                    objectName: "stFlick"
                     clip: true; contentWidth: width; contentHeight: stCol.implicitHeight + 40
                     ScrollBar.vertical: ScrollBar {}
                     ColumnLayout {
