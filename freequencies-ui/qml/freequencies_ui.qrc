@@ -3,5 +3,10 @@
         <file>FreequenciesView.qml</file>
         <file>Field.qml</file>
         <file>templates.js</file>
+        <file>fq/qmldir</file>
+        <file>fq/Fq.qml</file>
+        <file>fq/FqButton.qml</file>
+        <file>fq/Header.qml</file>
+        <file>fq/dish.png</file>
     </qresource>
 </RCC>
