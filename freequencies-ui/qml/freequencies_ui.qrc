@@ -10,6 +10,8 @@
         <file>fq/dish.png</file>
         <file>fq/FText.qml</file>
         <file>fq/DText.qml</file>
+        <file>fq/OtherCalendars.qml</file>
+        <file>fq/lib/nights.js</file>
         <file>fonts/BebasNeue-Regular.ttf</file>
     </qresource>
 </RCC>

@@ -3,3 +3,4 @@ FqButton 1.0 FqButton.qml
 Header 1.0 Header.qml
 FText 1.0 FText.qml
 DText 1.0 DText.qml
+OtherCalendars 1.0 OtherCalendars.qml

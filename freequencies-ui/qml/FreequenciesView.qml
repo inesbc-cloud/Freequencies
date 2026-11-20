@@ -23,6 +23,7 @@ import QtQuick.Dialogs
 import Logos.Theme
 import Logos.Controls
 import "fq"   // Freequencies: tokens, components, sections, views (one file each)
+import "fq/lib/nights.js" as Nights
 
 Item {
     id: root
@@ -198,8 +199,25 @@ Item {
     property date selectedDay: new Date()
     property string filterCalId: ""      // "" = all calendars (single-focus filter)
     property var hiddenCals: ({})        // per-device show/hide: {calId: true} = hidden from combined views
-    function calHidden(id) { return !!root.hiddenCals[id] }
+    // Freequencies (#5): calendars that aren't Freequencies calendars start hidden; ticking one shows it.
+    property var shownOthers: ({})
+    readonly property var effHidden: {
+        var h = {}; for (var k in root.hiddenCals) h[k] = root.hiddenCals[k]
+        for (var i = 0; i < root.calendars.length; i++) {
+            var c = root.calendars[i]
+            if (!Nights.isFreqCal(c) && !root.shownOthers[c.id]) h[c.id] = true
+        }
+        return h
+    }
+    function calHidden(id) { return !!root.effHidden[id] }
     function toggleCalVisible(id) {
+        var c = root.calById(id)
+        if (c && !Nights.isFreqCal(c)) {
+            var o = {}; for (var k0 in root.shownOthers) o[k0] = root.shownOthers[k0]
+            if (o[id]) delete o[id]; else o[id] = true
+            root.shownOthers = o
+            return
+        }
         var h = {}; for (var k in root.hiddenCals) h[k] = root.hiddenCals[k]
         if (h[id]) delete h[id]; else h[id] = true
         root.hiddenCals = h   // reassign so bindings (monthOccurrences, day/week lists) re-evaluate
@@ -340,6 +358,26 @@ Item {
         for (var i = 0; i < calendars.length; i++) if (calendars[i].id === id) return calendars[i]
         return null
     }
+    // ── Freequencies calendars (#5, fq/lib/nights.js) ─────────────────────────
+    readonly property var statuses: Nights.statuses
+    readonly property var types: Nights.types
+    function fieldOf(ev, k) { return Nights.fieldOf(ev, k) }
+    readonly property var freqCals: root.calendars.filter(function (c) { return Nights.isFreqCal(c) })
+    readonly property var otherCals: root.calendars.filter(function (c) { return !Nights.isFreqCal(c) })
+    function isFreqCal(c) { return Nights.isFreqCal(c) }
+    function isEditorOf(c) { return Nights.isEditorOf(c) }
+    function canEditNight(ev) { return Nights.canEdit(ev, ev ? root.calById(ev.calendarId) : null) }
+    function adoptCalendar(c) {
+        var why = Nights.adoptBlocker(c)
+        if (why) { root.notify(why + ".", true); return }
+        root.coreAsync("updateCalendarMeta", [c.id, JSON.stringify({ schema: Nights.adoptedSchema(c.schema) })], function (r) {
+            if (root.j(r, false) === true || String(r) === "true") {
+                var o = {}; for (var k in root.shownOthers) o[k] = root.shownOthers[k]; delete o[c.id]; root.shownOthers = o
+                root.notify("“" + (c.name || "Calendar") + "” now uses Freequencies fields"); root.refresh()
+            } else root.notify("Couldn't update “" + (c.name || "the calendar") + "”. Only its owner or editors can change its fields.", true)
+        })
+    }
+
     // Schema for a calendar, always an array (missing/empty → []).
     function schemaFor(calId) {
         var c = calById(calId)
@@ -361,7 +399,7 @@ Item {
         for (var i = 0; i < events.length; i++) {
             var e = events[i]
             if (filterCalId !== "" && e.calendarId !== filterCalId) continue  // single-focus filter
-            if (root.hiddenCals[e.calendarId]) continue                        // hidden calendars
+            if (root.effHidden[e.calendarId]) continue                         // hidden calendars
             if (!root.matchesFieldFilter(e, root.activeFilter)) continue      // field filter
             out.push(e)
         }
@@ -402,7 +440,7 @@ Item {
 
     // Cached expansion covering the whole visible 6×7 grid; re-evaluates when the
     // month, event set, or calendar filter changes.
-    property var monthOccurrences: root.computeMonthOccurrences(root.viewMonth, root.events, root.filterCalId, root.hiddenCals, root.activeFilter)
+    property var monthOccurrences: root.computeMonthOccurrences(root.viewMonth, root.events, root.filterCalId, root.effHidden, root.activeFilter)
     function computeMonthOccurrences(vm, evs, fcal, hidden, ff) {
         var first = new Date(vm.getFullYear(), vm.getMonth(), 1)
         var offset = (first.getDay() + 6) % 7
@@ -444,7 +482,7 @@ Item {
         return out
     }
     // A filter hides events, not clashes: compare against the unfiltered month.
-    property var clashMap: root.findClashes(root.computeMonthOccurrences(root.viewMonth, root.events, root.filterCalId, root.hiddenCals, null))
+    property var clashMap: root.findClashes(root.computeMonthOccurrences(root.viewMonth, root.events, root.filterCalId, root.effHidden, null))
     function clashesOf(ev) { return (ev && ev.seriesId !== undefined && root.clashMap[root.occKey(ev)]) || [] }
     function clashMark(ev) { var n = root.clashesOf(ev).length; return n ? "⚠ " : "" }
 
@@ -494,7 +532,7 @@ Item {
         }
         return out
     }
-    readonly property var fieldChoices: root.filterChoices(root.calendars, root.hiddenCals)
+    readonly property var fieldChoices: root.filterChoices(root.calendars, root.effHidden)
     // A filter whose field/value no longer exists in a shown calendar's schema is ignored.
     readonly property var activeFilter: {
         var f = root.fieldFilter; if (!f) return null
@@ -722,7 +760,7 @@ Item {
 
                 ListView {
                     Layout.fillWidth: true; Layout.fillHeight: true; clip: true
-                    model: root.calendars
+                    model: root.freqCals                       // Freequencies calendars; the others below (#5)
                     spacing: 2
                     delegate: Rectangle {
                         id: calRow
@@ -773,6 +811,8 @@ Item {
                         MouseArea { id: calRowMA; anchors.fill: parent; z: -1; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.filterCalId = modelData.id }
                     }
                 }
+
+                OtherCalendars { app: root; Layout.fillWidth: true }
 
                 // Field filter (every view): enum values and yes/no fields of the shown calendars.
                 ColumnLayout {
