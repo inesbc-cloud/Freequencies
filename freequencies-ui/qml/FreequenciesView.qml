@@ -1,27 +1,38 @@
-// Freequencies — organise club nights on top of the Scala calendar.
+// Freequencies — a fork of Scala's calendar view (scala-ui/qml/CalendarView.qml, see ../UPSTREAM.md),
+// grown into the coordination tool for Lisbon's independent culture one issue at a time
+// (docs/issues/). Everything below that isn't marked Freequencies is Scala's code, kept close to
+// upstream so fixes can be pulled across.
 //
-// A pure-QML view over the `scala` core module (ADR 0001 / 0002): it reads and writes Scala's
-// calendars, so every night is an ordinary Scala event and shows up in Scala too. Freequencies'
-// own data rides in Scala's mechanisms: the calendar's custom fields (Status, Venue, Type) and
-// Scala's per-event comments (ext items, ns "scala", kind "comment").
+// Scala calendar — pure-QML view over the `scala` core module.
 //
-// Rules carried over from the Scala view: every core call is async (callVia), results are
-// double-JSON-encoded (j()), all text that other people wrote is Text.PlainText.
+// Rewritten from scratch to render correctly on the Logos design system that
+// Basecamp bundles (Perun's view is the reference): only LogosText + LogosButton
+// (the safe component baseline), Theme.palette.* / Theme.spacing.* tokens, and
+// NUMERIC font.pixelSize (Theme.typography.<size> tokens don't exist on the
+// bundled DS — that was the old view's invisible text). Inputs use plain
+// TextField styled with tokens. Feature parity with the Android app: month grid,
+// per-day events, event create/edit/delete, calendar create/join/share.
+//
+// The core is reached with a synchronous logos.callModule shim; returns come back
+// DOUBLE-JSON-encoded, so `j()` unwraps up to twice.
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import "templates.js" as Tpl
+import QtQuick.Dialogs
 
 import Logos.Theme
 import Logos.Controls
 
 Item {
     id: root
-    width: 1100
-    height: 720
+    width: 900
+    height: 640
 
-    // ── core bridge (same pattern as Scala's view) ───────────────────────────────
+    // ── core bridge ──────────────────────────────────────────────────────────
     property bool ready: false
+    // RULE (vpavlin): no blocking cross-module calls in a view. Every call goes through callVia:
+    // logos.callModuleAsync when the host has it, else the old blocking callModule DEFERRED to the
+    // next event-loop turn (never inside the caller's handler). Callbacks get the raw result.
     readonly property int callTimeoutMs: 20000
     function hasBridge() {
         return typeof logos !== "undefined" && logos !== null
@@ -30,23 +41,45 @@ Item {
     function _deliver(cb, raw) {
         if (!cb) return
         try { cb(raw === undefined || raw === null ? "" : raw) }
-        catch (e) { console.warn("freequencies: callback error: " + e) }
+        catch (e) { console.warn("scala view: callback error: " + e) }
     }
     function callVia(module, method, args, cb) {
         var a = args || []
-        if (!root.hasBridge()) { Qt.callLater(function () { root._deliver(cb, "") }); return }
+        if (typeof logos === "undefined" || logos === null) { Qt.callLater(function () { root._deliver(cb, "") }); return }
         if (typeof logos.callModuleAsync === "function") {
             try { logos.callModuleAsync(module, method, a, function (res) { root._deliver(cb, res) }, root.callTimeoutMs) }
-            catch (e) { console.warn("freequencies: callModuleAsync threw: " + e); Qt.callLater(function () { root._deliver(cb, "") }) }
+            catch (e) { console.warn("scala view: callModuleAsync threw: " + e); Qt.callLater(function () { root._deliver(cb, "") }) }
             return
         }
         Qt.callLater(function () {
             var raw = ""
-            try { raw = logos.callModule(module, method, a) } catch (e) { raw = "" }
+            try { raw = (typeof logos.callModule === "function") ? logos.callModule(module, method, a) : "" } catch (e) { raw = "" }
             root._deliver(cb, raw)
         })
     }
-    function core(method, args, cb) { root.callVia("scala", method, args, cb) }
+    function coreAsync(method, args, cb) { root.callVia("scala", method, args, cb) }
+    function loamAsync(method, args, cb) { root.callVia("loam_core", method, args, cb) }
+    // Basecamp hands string results to QML JSON-quoted; strip one layer of quotes.
+    function unq(raw) { return String(raw === undefined || raw === null ? "" : raw).replace(/^"|"$/g, "") }
+    // Core/view version guard: core + view are SEPARATE Basecamp packages, so a stale core can run
+    // under a fresh view — silently signing with the wrong key while the view shows loam identities.
+    // Detect it (old cores lack coreVersion() → "" → stale) and warn loudly instead of failing quietly.
+    property bool coreOutOfDate: false
+    property string coreVer: ""
+    readonly property string minCore: "0.11.0"   // first core with Loam HD identities + invite tickets (ADR 0022)
+    // Comments (ADR 0024) need a core with postExt/deleteExt; an older core just doesn't offer them.
+    readonly property bool coreHasComments: root.coreVer !== "" && !root.verLt(root.coreVer, "0.12.0")
+    function verLt(a, b) {
+        var pa = String(a).split("."), pb = String(b).split(".")
+        for (var i = 0; i < 3; i++) { var x = parseInt(pa[i] || "0"), y = parseInt(pb[i] || "0"); if (x !== y) return x < y }
+        return false
+    }
+    function checkCoreVersion() {
+        root.coreAsync("coreVersion", [], function (r) {
+            root.coreVer = root.unq(r)
+            root.coreOutOfDate = (root.coreVer === "" || root.verLt(root.coreVer, root.minCore))
+        })
+    }
     function j(raw, fallback) {
         var v = raw
         for (var i = 0; i < 3 && typeof v === "string"; i++) {
@@ -56,1064 +89,989 @@ Item {
         }
         return (v === undefined || v === null) ? fallback : v
     }
+    // Identity SERVICE lives in loam_core (loam ADR 0004) — the panel talks to it directly (loamAsync).
 
-    // ── tokens (Scala's Catppuccin set, so both apps look like one family) ───────
-    readonly property color cBase:    "#1e1e2e"
-    readonly property color cMantle:  "#181825"
-    readonly property color cCrust:   "#11111b"
-    readonly property color cSurface: "#2a2a3c"
-    readonly property color cSurface2:"#313244"
+    // ── identities (loam_core service; UI is ours) ─────────────────────────────
+    property var identities: []            // [{id,kind,label,address,pubHex}]
+    property string defaultIdentityId: "device"
+    property string renameTargetId: ""      // soft identity being renamed (idRenamePopup)
+    property string idRemoveId: ""          // identity pending removal (idRemovePopup) + its meta for the warning
+    property string idRemoveKind: ""
+    property string idRemoveLabel: ""
+    property string idRemoveAddr: ""
+    // Defer the model assignment to the next event-loop tick. This is called from inside identity
+    // Repeater delegates' onClicked (set-default / remove); assigning root.identities synchronously
+    // there rebuilds that Repeater and destroys the very delegate whose handler is still on the stack
+    // → "Object destroyed while a QML signal handler is in progress" → Aborted. Reads stay sync; only
+    // the assign is deferred, so any caller (delegate or not) is crash-safe.
+    // ── Loam HD identities (ADR 0022) ─────────────────────────────────────────
+    // hd = loam_core.hdStatus {exists, unlocked, mainAddress}; when a root exists, new/joined calendars
+    // offer "Appear as: a new identity just for this calendar / my main identity".
+    // hdSign = scala core hdState {pending, error}: writes waiting for Loam (locked / no root).
+    property var hd: ({ exists: false, unlocked: false })
+    property var hdSign: ({ pending: 0, error: "" })
+    function refreshHd() {
+        root.loamAsync("hdStatus", [], function (r) { var s = root.j(r, null); if (s && typeof s === "object" && !s.error) root.hd = s })
+        root.coreAsync("hdState", [], function (r) { var s = root.j(r, null); if (s && typeof s === "object") root.hdSign = s })
+    }
+    function hdSignMessage() {
+        var n = root.hdSign.pending || 0, e = root.hdSign.error || ""
+        var what = n + " change" + (n === 1 ? "" : "s") + " waiting to be signed"
+        if (e === "locked") return "Unlock your identity in Loam — " + what + "."
+        if (e === "no root") return "Set up your identity in Loam — " + what + "."
+        return "Waiting for Loam (" + e + ") — " + what + "."
+    }
+    function bindingLabel(b) { return b === "loam:main" ? "My main identity" : (b === "loam:ctx" ? "An identity just for this calendar" : "") }
+
+    function refreshIdentities() {
+        root.refreshHd()
+        root.loamAsync("listIdentities", [], function (r1) {
+            var ids = root.j(r1, [])
+            root.loamAsync("getDefaultIdentityId", [], function (r2) {
+                var def = root.j(r2, "device")
+                Qt.callLater(function () { root.identities = ids; root.defaultIdentityId = def })
+            })
+        })
+    }
+    function identityLabel(id) {
+        for (var i = 0; i < identities.length; i++) if (identities[i].id === id) return identities[i].label
+        return id
+    }
+    // Which identity signs my events on calId → root.calSetIdentity (async; the settings popup shows
+    // the default until the answer arrives, and ignores it if another calendar was opened meanwhile).
+    function loadCalendarIdentity(calId) {
+        root.calSetIdentity = root.defaultIdentityId
+        root.loamAsync("identityForContainer", [calId], function (r) {
+            var m = root.j(r, null)
+            if (root.setCalId === calId) root.calSetIdentity = (m && m.id) ? m.id : root.defaultIdentityId
+        })
+    }
+    // Identity meta (from the loaded list) whose address signs THIS calendar for me. calAddr[calId]
+    // is the bound authoring address; falls back to the default identity when the calendar is unbound.
+    function identityByAddr(addr) {
+        if (!addr) return null
+        for (var i = 0; i < identities.length; i++) if (identities[i].address === addr) return identities[i]
+        return null
+    }
+    function calSigner(calId) { return identityByAddr(root.calAddr[calId] || "") }
+    // True if authoring on this calendar goes through a Keycard (every write needs a card tap).
+    function calIsKeycard(calId) { var m = calSigner(calId); return !!m && m.kind === "keycard" }
+    // How many calendars this identity currently signs (by address) — drives the "removing this
+    // orphans N calendars" warning, mirroring the fold's owner/binding resolution.
+    function identitySignsCount(addr) {
+        if (!addr) return 0
+        var n = 0
+        for (var i = 0; i < calendars.length; i++) if ((root.calAddr[calendars[i].id] || "") === addr) n++
+        return n
+    }
+
+    // ── keycard authoring (scala ADR 0016) — poll the core snapshot; drive the overlay ─────────
+    // A write on a keycard-owned calendar (or an enrol) signs asynchronously in loam via a card tap;
+    // scala reports progress through keycardState(). We poll it fast and show a "hold your Keycard"
+    // overlay while pending, an error on failure, and refresh on success.
+    property var kc: ({ active: false })
+    property string kcLastRef: ""
+    property bool kcPollBusy: false
+    function pollKeycard() {
+        if (!root.ready || root.kcPollBusy) return
+        root.kcPollBusy = true
+        root.coreAsync("keycardState", [], function (r) { root.kcPollBusy = false; root.applyKeycardState(root.j(r, { active: false })) })
+    }
+    function applyKeycardState(s) {
+        var prevPhase = root.kc.phase, prevRef = root.kc.ref
+        root.kc = s
+        // Reopen while pending — BUT not for a ref the user already cancelled (Cancel sets kcLastRef),
+        // else closing the overlay just re-opens it on the next tick = an inescapable trap.
+        if (s.phase === "pending" && s.ref !== root.kcLastRef) { if (!keycardOverlay.visible) keycardOverlay.open() }
+        else if (s.ref && (s.ref !== root.kcLastRef)) {          // a terminal result we haven't shown yet
+            root.kcLastRef = s.ref
+            if (s.phase === "done") { keycardOverlay.close(); root.refresh() }
+            // "failed" → keep the overlay open showing the error (user closes it)
+        }
+    }
+
+    // ── state ────────────────────────────────────────────────────────────────
+    property var calendars: []          // [{id,name,color,encryptionKey,...}]
+    property var events: []             // flat list across all calendars
+    property date viewMonth: new Date()   // any date in the shown month
+    property date selectedDay: new Date()
+    property string filterCalId: ""      // "" = all calendars (single-focus filter)
+    property var hiddenCals: ({})        // per-device show/hide: {calId: true} = hidden from combined views
+    function calHidden(id) { return !!root.hiddenCals[id] }
+    function toggleCalVisible(id) {
+        var h = {}; for (var k in root.hiddenCals) h[k] = root.hiddenCals[k]
+        if (h[id]) delete h[id]; else h[id] = true
+        root.hiddenCals = h   // reassign so bindings (monthOccurrences, day/week lists) re-evaluate
+    }
+    property string myIdentity: ""       // this device's identity (event author id)
+
+    readonly property var fieldTypes: ["text","longtext","number","date","datetime","bool","url","enum","color"]
+
+    readonly property var monthNames: ["January","February","March","April","May","June","July","August","September","October","November","December"]
+    readonly property var weekDays: ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"]
+
+    // ── Catppuccin Mocha — match the mobile app's look (the bundled DS default is a flatter, colder
+    // dark; the mobile app is warm Catppuccin). Local palette so the desktop canvas reads identically
+    // to the phone. Used for the calendar surfaces/accents; DS components (inputs) keep their tokens.
+    readonly property color cBase:    "#1e1e2e"   // app background
+    readonly property color cMantle:  "#181825"   // side panels
+    readonly property color cCrust:   "#11111b"   // deepest
+    readonly property color cSurface: "#2a2a3c"   // cards / selected
+    readonly property color cSurface2:"#313244"   // hover / borders
+    readonly property color cOverlay: "#45475a"   // hairlines
     readonly property color cText:    "#cdd6f4"
     readonly property color cSub:     "#9399b2"
-    readonly property color cFaint:   "#6c7086"
-    readonly property color cBlue:    "#89b4fa"
-    readonly property color cYellow:  "#f9e2af"
+    readonly property color cFaint:   "#6c7086"   // out-of-month / tertiary
+    readonly property color cBlue:    "#89b4fa"   // primary
+    readonly property color cYellow:  "#f9e2af"   // today
     readonly property color cGreen:   "#a6e3a1"
     readonly property color cRed:     "#f38ba8"
     readonly property color cMauve:   "#cba6f7"
-    readonly property color cPink:    "#f5c2e7"
 
-    // ── the Freequencies schema: custom fields a calendar gets when it's used for Freequencies ──
-    readonly property var statuses: ["Hold", "Confirmed", "Cancelled"]
-    readonly property var types: ["Club night", "Concert", "Residency", "Other"]
-    readonly property var freqFields: [
-        { key: "status", label: "Status", type: "enum", options: root.statuses },
-        { key: "venue", label: "Venue", type: "text" },
-        { key: "type", label: "Type", type: "enum", options: root.types }
-    ]
-    // Colour comes from the status field (ADR 0001 §4), not from the calendar.
-    function statusColor(s) {
-        return s === "Confirmed" ? root.cGreen : s === "Cancelled" ? root.cRed : s === "Hold" ? root.cYellow : root.cFaint
+    Component.onCompleted: Qt.callLater(function () {
+        root.ready = root.hasBridge()
+        if (root.ready) {
+            root.checkCoreVersion()
+            root.coreAsync("getIdentity", [], function (r) { root.myIdentity = String(root.j(r, "")) })
+            refresh()
+        }
+    })
+
+    // Poll like kym's view does: listCalendars() self-drives the delivery bootstrap
+    // in the core, so this keeps the node coming up + refreshes data. Also refreshes
+    // the diagnostics while the Debug panel is open.
+    // Every call is async now (callVia); refresh() coalesces, so a slow core can't pile polls up.
+    Timer {
+        interval: 6000; running: true; repeat: true
+        onTriggered: {
+            if (!root.ready) return
+            root.refresh()
+            root.computeSoon()
+            if (diagPopup.visible) root.loadDiag()
+        }
     }
-    function fieldOf(ev, k) { return (ev && ev.fields && typeof ev.fields[k] === "string") ? ev.fields[k] : "" }
 
-    // ── data ─────────────────────────────────────────────────────────────────────
-    property var calendars: []
-    property var events: []
-    property bool loading: true
-    property string loadError: ""
-    property bool refreshing: false
-    property string coreVer: ""
+    // Keycard progress needs a snappier poll than the 3s data refresh (a card tap resolves in a few
+    // seconds and the overlay must appear/clear promptly).
+    Timer {
+        interval: 700; running: root.ready; repeat: true
+        onTriggered: root.pollKeycard()
+    }
+
+    // ── data ─────────────────────────────────────────────────────────────────
+    // One refresh in flight at a time; a request meanwhile runs once more after it (coalesced).
+    property bool refreshBusy: false
+    property bool refreshAgain: false
+    property double refreshStartedAt: 0
     function refresh() {
-        if (root.refreshing) return            // single-flight
-        root.refreshing = true
-        root.core("listCalendars", [], function (rc) {
-            var cs = root.j(rc, null)
-            root.core("listAllEvents", [], function (re) {
-                var es = root.j(re, null)
-                root.refreshing = false
-                root.loading = false
-                if (!Array.isArray(cs) || !Array.isArray(es)) {
-                    root.loadError = root.hasBridge() ? "Couldn't read your calendars from Scala. Is the ‘scala’ package installed?" : "No Basecamp bridge."
-                    return
-                }
-                root.loadError = ""
-                root.calendars = cs
-                root.events = es
-                if (root.selected) {
-                    var still = root.eventById(root.selected.id)
-                    if (!still) root.selected = null
-                }
+        if (!root.ready) return
+        if (root.refreshBusy && Date.now() - root.refreshStartedAt < 45000) { root.refreshAgain = true; return }
+        root.refreshBusy = true; root.refreshStartedAt = Date.now()
+        refreshIdentities()
+        // The core aggregates everything the view needs into two calls — listCalendars carries each
+        // calendar's authoring address (loam binding), listAllEvents every event tagged with calendarId.
+        root.coreAsync("listCalendars", [], function (r1) {
+            var cals = root.j(r1, [])
+            var ca = {}
+            for (var ci = 0; ci < cals.length; ci++) ca[cals[ci].id] = cals[ci].authorAddr || ""
+            root.coreAsync("listAllEvents", [], function (r2) {
+                var evs = root.j(r2, [])
+                // Deferred apply: reassigning these models rebuilds the calendar/event Repeaters;
+                // deferring keeps that off any in-flight signal handler's stack.
+                Qt.callLater(function () {
+                    root.calendars = cals; root.calAddr = ca; root.events = evs
+                    root.refreshBusy = false
+                    if (root.refreshAgain) { root.refreshAgain = false; root.refresh() }
+                })
             })
         })
     }
-    Timer { interval: 10000; running: root.ready; repeat: true; onTriggered: root.refresh() }
-    Component.onCompleted: Qt.callLater(function () {
-        root.ready = root.hasBridge()
-        root.core("coreVersion", [], function (r) { root.coreVer = String(root.j(r, "") || "") })
-        root.refresh()
-    })
-
-    function calById(id) { for (var i = 0; i < calendars.length; i++) if (calendars[i].id === id) return calendars[i]; return null }
-    function eventById(id) { for (var i = 0; i < events.length; i++) if (events[i].id === id) return events[i]; return null }
-    // A calendar is a Freequencies calendar when its `status` field is the Freequencies one: a choice
-    // field offering Hold, Confirmed and Cancelled. A `status` field of another shape belongs to
-    // someone else's convention and is left alone.
-    function statusFieldOf(c) {
-        var sc = (c && c.schema) || []
-        for (var i = 0; i < sc.length; i++) if (sc[i] && sc[i].key === "status") return sc[i]
-        return null
+    // Deterministic color derived from the calendar id — SAME on desktop + mobile,
+    // so a calendar looks consistent across devices regardless of a stored color.
+    readonly property var calPalette: ["#a6e3a1","#89b4fa","#f9e2af","#f38ba8","#cba6f7","#94e2d5","#fab387","#74c7ec","#eba0ac","#b4befe"]
+    function calColor(calId) {
+        if (!calId) return root.cBlue
+        var h = 0
+        for (var i = 0; i < calId.length; i++) h = (h * 31 + calId.charCodeAt(i)) >>> 0
+        return root.calPalette[h % root.calPalette.length]
     }
-    function isFreqStatusField(f) {
-        if (!f || f.type !== "enum" || !Array.isArray(f.options)) return false
-        for (var i = 0; i < root.statuses.length; i++) if (f.options.indexOf(root.statuses[i]) < 0) return false
-        return true
-    }
-    function isFreqCal(c) { return isFreqStatusField(statusFieldOf(c)) }
-    // Why "Use for Freequencies" can't adopt this calendar ("" = it can).
-    function adoptBlocker(c) {
-        if (!isEditorOf(c)) return "Only its owner or editors can add Freequencies fields"
-        var sf = statusFieldOf(c)
-        if (sf && !isFreqStatusField(sf)) return "Has its own “status” field, so Freequencies leaves it alone"
-        var sc = (c && c.schema) || []
-        for (var i = 0; i < sc.length; i++) {
-            var f = sc[i]
-            if (f && f.key === "venue" && f.type && f.type !== "text") return "Has its own “venue” field of another kind"
-            if (f && f.key === "type" && f.type && f.type !== "enum") return "Has its own “type” field of another kind"
-        }
+    function calName(calId) {
+        for (var i = 0; i < calendars.length; i++) if (calendars[i].id === calId) return calendars[i].name
         return ""
     }
-    readonly property var freqCals: { var o = []; for (var i = 0; i < calendars.length; i++) if (isFreqCal(calendars[i])) o.push(calendars[i]); return o }
-    readonly property var otherCals: { var o = []; for (var i = 0; i < calendars.length; i++) if (!isFreqCal(calendars[i])) o.push(calendars[i]); return o }
-    property var hiddenCals: ({})
-    function toggleCal(id) { var h = {}; for (var k in hiddenCals) h[k] = hiddenCals[k]; if (h[id]) delete h[id]; else h[id] = true; hiddenCals = h }
-    // Only owners/editors may change a calendar's fields.
-    function isEditorOf(c) {
-        if (!c) return false
-        var me = c.authorAddr || ""
-        if (!me) return false
-        if (c.owner === me) return true
-        var r = c.roles || {}
-        return r[me] === "editor" || r[me] === "admin"
-    }
-
-    // "Use for Freequencies": add the Status / Venue / Type fields to a calendar's schema (keeps its own fields).
-    function adoptCalendar(c) {
-        var why = adoptBlocker(c)
-        if (why) { root.notify(why + ".", true); return }
-        var sc = (c.schema || []).slice()
-        for (var i = 0; i < root.freqFields.length; i++) {
-            var f = root.freqFields[i], have = false
-            for (var k = 0; k < sc.length; k++) if (sc[k] && sc[k].key === f.key) have = true
-            if (!have) sc.push(f)
+    // My own RSVP (ADR 0021) on an event, for the at-a-glance card marker.
+    function myRsvpOf(ev) { if (!ev || !ev.rsvps) return ""; var me = root.addrFor(root.calById(ev.calendarId)); return (me && ev.rsvps[me]) || "" }
+    function rsvpMark(ev) { var s = root.myRsvpOf(ev); return s === "going" ? "✓ " : (s === "maybe" ? "? " : "") }
+    // An event's colour IS its calendar's colour — the calendar is the event's identity here.
+    // (A Freequencies-style app maps a custom-field value to colour itself; scala shows the field
+    // value as a badge but keeps the event the calendar's colour — no per-event override.)
+    function evColor(ev) { return root.calColor(ev ? ev.calendarId : "") }
+    // Day timeline (calMode "day"): all-day band + hour-bucketed schedule for a day.
+    function dayAllDay(d) { var a = root.eventsOnDay(d); var out = []; for (var i = 0; i < a.length; i++) if (a[i].allDay) out.push(a[i]); return out }
+    function dayTimeline(d) {
+        var a = root.eventsOnDay(d); var timed = []
+        for (var i = 0; i < a.length; i++) if (!a[i].allDay) timed.push(a[i])
+        timed.sort(function (x, y) { return x.startTime - y.startTime })
+        var lo = 8, hi = 20
+        for (var j = 0; j < timed.length; j++) {
+            var s = new Date(timed[j].startTime).getHours()
+            var e = new Date(timed[j].endTime); var eh = e.getHours() + (e.getMinutes() > 0 ? 1 : 0)
+            lo = Math.min(lo, s); hi = Math.max(hi, Math.min(23, eh))
         }
-        root.core("updateCalendarMeta", [c.id, JSON.stringify({ schema: sc })], function (r) {
-            if (root.j(r, false) === true || String(r) === "true") { root.notify("“" + (c.name || "Calendar") + "” now uses Freequencies fields"); root.refresh() }
-            else root.notify("Couldn't update “" + (c.name || "the calendar") + "”. Only its owner or editors can change its fields.", true)
-        })
+        var rows = []
+        for (var h = lo; h <= hi; h++) {
+            var items = []
+            for (var k = 0; k < timed.length; k++) if (new Date(timed[k].startTime).getHours() === h) items.push(timed[k])
+            rows.push({ hour: h, items: items })
+        }
+        return rows
     }
-
-    // ── recurrence expansion (identical to Scala's) ──────────────────────────────
-    function expandEvent(ev, winStart, winEnd) {
-        var dur = Math.max(0, (ev.endTime || ev.startTime) - ev.startTime)
-        var r = ev.recur
-        function mk(s) { var o = {}; for (var k in ev) o[k] = ev[k]; o.startTime = s; o.endTime = s + dur; o.seriesId = ev.id; o.occ = s; return o }
-        if (!r || !r.freq) return (ev.startTime + dur >= winStart && ev.startTime <= winEnd) ? [mk(ev.startTime)] : []
-        var interval = Math.max(1, Math.floor(r.interval || 1))
-        var hardUntil = (typeof r.until === "number") ? r.until : Infinity
-        var out = [], cur = new Date(ev.startTime)
-        for (var i = 0; i < 500; i++) {
-            var s = cur.getTime()
-            if (s > hardUntil || s > winEnd) break
-            if (s + dur >= winStart) out.push(mk(s))
-            if (r.freq === "daily") cur.setDate(cur.getDate() + interval)
-            else if (r.freq === "weekly") cur.setDate(cur.getDate() + 7 * interval)
-            else if (r.freq === "monthly") cur.setMonth(cur.getMonth() + interval)
-            else if (r.freq === "yearly") cur.setFullYear(cur.getFullYear() + interval)
-            else break
+    function hh(h) { return (h < 10 ? "0" + h : "" + h) + ":00" }
+    function writableCalendars() {
+        var out = []
+        for (var i = 0; i < calendars.length; i++) if (calendars[i].encryptionKey || calendars[i].creatorId !== undefined) out.push(calendars[i])
+        return out.length ? out : calendars
+    }
+    function calById(id) {
+        for (var i = 0; i < calendars.length; i++) if (calendars[i].id === id) return calendars[i]
+        return null
+    }
+    // Schema for a calendar, always an array (missing/empty → []).
+    function schemaFor(calId) {
+        var c = calById(calId)
+        return (c && c.schema && c.schema.length) ? c.schema : []
+    }
+    // Short, human-friendly form of an identity string for history/roles lines.
+    function shortAuthor(a) {
+        if (!a) return "?"
+        var s = String(a)
+        if (s.indexOf("scala-") === 0) s = s.substring(6)
+        return s.substring(0, 6)
+    }
+    function sameDay(a, b) {
+        return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
+    }
+    // Events filtered by the active calendar filter (null-safe on old events).
+    function eventsFiltered() {
+        var out = []
+        for (var i = 0; i < events.length; i++) {
+            var e = events[i]
+            if (filterCalId !== "" && e.calendarId !== filterCalId) continue  // single-focus filter
+            if (root.hiddenCals[e.calendarId]) continue                        // hidden calendars
+            if (!root.matchesFieldFilter(e, root.activeFilter)) continue      // field filter
+            out.push(e)
         }
         return out
     }
-    function expandEvents(evs, winStart, winEnd) {
+    // Look up a master event by id (recurrence edits operate on the master).
+    function eventById(id) {
+        for (var i = 0; i < events.length; i++) if (events[i].id === id) return events[i]
+        return null
+    }
+
+    // ── recurrence expansion (identical algorithm to the mobile app) ───────────
+    function expandEvent(ev, winStart, winEnd) {
+        var dur = Math.max(0, (ev.endTime || ev.startTime) - ev.startTime);
+        var r = ev.recur;
+        function mk(s){ var o={}; for (var k in ev) o[k]=ev[k]; o.startTime=s; o.endTime=s+dur; o.seriesId=ev.id; o.occ=s; return o; }
+        if (!r || !r.freq) return (ev.startTime+dur>=winStart && ev.startTime<=winEnd) ? [mk(ev.startTime)] : [];
+        var interval = Math.max(1, Math.floor(r.interval||1));
+        var hardUntil = (typeof r.until === "number") ? r.until : Infinity;
+        var out=[]; var cur=new Date(ev.startTime);
+        for (var i=0;i<500;i++){
+            var s=cur.getTime();
+            if (s>hardUntil || s>winEnd) break;
+            if (s+dur>=winStart) out.push(mk(s));
+            if (r.freq==="daily") cur.setDate(cur.getDate()+interval);
+            else if (r.freq==="weekly") cur.setDate(cur.getDate()+7*interval);
+            else if (r.freq==="monthly") cur.setMonth(cur.getMonth()+interval);
+            else if (r.freq==="yearly") cur.setFullYear(cur.getFullYear()+interval);
+            else break;
+        }
+        return out;
+    }
+    function expandEvents(events, winStart, winEnd) {
+        var out=[]; for (var i=0;i<events.length;i++){ var xs=expandEvent(events[i], winStart, winEnd); for (var k=0;k<xs.length;k++) out.push(xs[k]); }
+        out.sort(function(a,b){return a.startTime-b.startTime;}); return out;
+    }
+    function recurLabel(r){ if(!r||!r.freq) return "Does not repeat"; var n=Math.max(1,Math.floor(r.interval||1)); var u={daily:"day",weekly:"week",monthly:"month",yearly:"year"}[r.freq]; var b=(n===1?("Every "+u):("Every "+n+" "+u+"s")); return r.until?(b+", until "+new Date(r.until).toLocaleDateString()):b; }
+
+    // Cached expansion covering the whole visible 6×7 grid; re-evaluates when the
+    // month, event set, or calendar filter changes.
+    property var monthOccurrences: root.computeMonthOccurrences(root.viewMonth, root.events, root.filterCalId, root.hiddenCals, root.activeFilter)
+    function computeMonthOccurrences(vm, evs, fcal, hidden, ff) {
+        var first = new Date(vm.getFullYear(), vm.getMonth(), 1)
+        var offset = (first.getDay() + 6) % 7
+        var firstCell = new Date(first.getFullYear(), first.getMonth(), 1 - offset)
+        var ws = new Date(firstCell.getFullYear(), firstCell.getMonth(), firstCell.getDate(), 0, 0, 0, 0).getTime()
+        var we = ws + 42 * 24 * 3600 * 1000 - 1
+        var src = []
+        for (var i = 0; i < evs.length; i++) {
+            if (fcal !== "" && evs[i].calendarId !== fcal) continue
+            if (hidden[evs[i].calendarId]) continue
+            if (ff && !root.matchesFieldFilter(evs[i], ff)) continue
+            src.push(evs[i])
+        }
+        return root.expandEvents(src, ws, we)
+    }
+
+    // ── clash warnings (same algorithm as mobile src/lib/clashes.ts) ──────────
+    // Timed occurrences in the same calendar whose times overlap. A hint only: nothing is
+    // stored. All-day and zero-length occurrences never clash. Covers the visible month grid.
+    function occKey(o) { return o.seriesId + "@" + o.occ }
+    function findClashes(occs) {
+        var groups = {}, out = {}
+        for (var i = 0; i < occs.length; i++) {
+            var o = occs[i]
+            if (o.allDay || !(o.endTime > o.startTime) || !o.calendarId) continue
+            (groups[o.calendarId] = groups[o.calendarId] || []).push(o)
+        }
+        function add(a, b) { var k = root.occKey(a); (out[k] = out[k] || []).push(b) }
+        for (var g in groups) {
+            var list = groups[g]
+            list.sort(function (a, b) { return (a.startTime - b.startTime) || (root.occKey(a) < root.occKey(b) ? -1 : (root.occKey(a) > root.occKey(b) ? 1 : 0)) })
+            for (var x = 0; x < list.length; x++)
+                for (var y = x + 1; y < list.length && list[y].startTime < list[x].endTime; y++) {
+                    if (root.occKey(list[x]) === root.occKey(list[y])) continue
+                    add(list[x], list[y]); add(list[y], list[x])
+                }
+        }
+        for (var k in out) out[k].sort(function (a, b) { return a.startTime - b.startTime })
+        return out
+    }
+    // A filter hides events, not clashes: compare against the unfiltered month.
+    property var clashMap: root.findClashes(root.computeMonthOccurrences(root.viewMonth, root.events, root.filterCalId, root.hiddenCals, null))
+    function clashesOf(ev) { return (ev && ev.seriesId !== undefined && root.clashMap[root.occKey(ev)]) || [] }
+    function clashMark(ev) { var n = root.clashesOf(ev).length; return n ? "⚠ " : "" }
+
+    function eventsOnDay(d) {
+        var ds = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0).getTime()
+        var de = ds + 24 * 3600 * 1000 - 1
+        var occ = expandEvents(eventsFiltered(), ds, de)
         var out = []
-        for (var i = 0; i < evs.length; i++) { var xs = expandEvent(evs[i], winStart, winEnd); for (var k = 0; k < xs.length; k++) out.push(xs[k]) }
+        for (var i = 0; i < occ.length; i++) if (sameDay(new Date(occ[i].startTime), d)) out.push(occ[i])
+        return out
+    }
+    function dotsOnDay(d) {
+        var cols = []
+        var occ = root.monthOccurrences
+        for (var i = 0; i < occ.length && cols.length < 4; i++)
+            if (sameDay(new Date(occ[i].startTime), d)) cols.push(evColor(occ[i]))
+        return cols
+    }
+    function fmtTime(ms) { return Qt.formatTime(new Date(ms), "hh:mm") }
+    // Custom-field values as badges (status/type/tags) — skip empty + long, cap at 4.
+    function fieldValues(ev) {
+        var out = []
+        if (ev && ev.fields) for (var k in ev.fields) { var v = String(ev.fields[k]); if (v.length > 0 && v.length <= 24) out.push(v) }
+        return out.slice(0, 4)
+    }
+    // ── view filters (same logic as mobile src/lib/filters.ts) ──────────────────
+    // One custom-field value at a time (enum options and yes/no fields of the shown calendars),
+    // applied to every view; plus date-range presets for search results. View-only.
+    property var fieldFilter: null        // { key, value } or null
+    property string rangeId: "next90"
+    property bool rangePicked: false      // until picked, a search covers ±1 year
+    readonly property var ranges: [
+        { id: "next7", label: "Next 7 days" }, { id: "next30", label: "Next 30 days" }, { id: "next90", label: "Next 90 days" },
+        { id: "past30", label: "Past 30 days" }, { id: "year", label: "This year" }, { id: "all", label: "±1 year" }]
+    function filterChoices(cals, hidden) {
+        var out = [], seen = {}
+        function push(key, value, label) { var id = key + "\u0000" + value; if (seen[id]) return; seen[id] = true; out.push({ key: key, value: value, label: label }) }
+        for (var i = 0; i < cals.length; i++) {
+            if (hidden[cals[i].id]) continue
+            var sc = cals[i].schema || []
+            for (var j = 0; j < sc.length; j++) {
+                var f = sc[j]; if (!f || !f.key) continue
+                var name = f.label || f.key
+                if (f.type === "enum") { var o = f.options || []; for (var k = 0; k < o.length; k++) if (o[k]) push(f.key, o[k], name + ": " + o[k]) }
+                else if (f.type === "bool") push(f.key, "true", name)
+            }
+        }
+        return out
+    }
+    readonly property var fieldChoices: root.filterChoices(root.calendars, root.hiddenCals)
+    // A filter whose field/value no longer exists in a shown calendar's schema is ignored.
+    readonly property var activeFilter: {
+        var f = root.fieldFilter; if (!f) return null
+        for (var i = 0; i < root.fieldChoices.length; i++) if (root.fieldChoices[i].key === f.key && root.fieldChoices[i].value === f.value) return f
+        return null
+    }
+    function matchesFieldFilter(ev, f) {
+        if (!f) return true
+        var v = ev && ev.fields ? ev.fields[f.key] : undefined
+        if (f.value === "true") return v === true || v === "true"
+        return v !== undefined && v !== null && String(v) === f.value
+    }
+    function rangeWindow(id, now) {
+        var d = new Date(now); d.setHours(0, 0, 0, 0); var today = d.getTime()
+        function day(n) { var x = new Date(today); x.setDate(x.getDate() + n); return x.getTime() }
+        if (id === "next7") return [today, day(7) - 1]
+        if (id === "next30") return [today, day(30) - 1]
+        if (id === "past30") return [day(-30), day(1) - 1]
+        if (id === "year") { var y = new Date(today).getFullYear(); return [new Date(y, 0, 1).getTime(), new Date(y + 1, 0, 1).getTime() - 1] }
+        if (id === "all") return [day(-365), day(366) - 1]
+        return [today, day(90) - 1]
+    }
+    readonly property string effectiveRange: (root.searching && !root.rangePicked) ? "all" : root.rangeId
+
+    // ── search (#) — match events across ALL dates by title/location/notes/calendar/fields ──
+    property string searchQuery: ""
+    // Occurrences within the chosen date range (search defaults to ±1 year) that match `q`.
+    function eventsMatching(q, rangeId) {
+        q = (q || "").trim().toLowerCase()
+        if (q === "") return []
+        var w = root.rangeWindow(rangeId || "all", Date.now())
+        var src = root.expandEvents(eventsFiltered(), w[0], w[1]); var out = []
+        for (var i = 0; i < src.length; i++) {
+            var ev = src[i]
+            var hay = ((ev.title || "") + " " + (ev.location || "") + " " + (ev.description || "") + " " + calName(ev.calendarId)).toLowerCase()
+            if (ev.fields) for (var k in ev.fields) hay += " " + String(ev.fields[k]).toLowerCase()
+            if (hay.indexOf(q) >= 0) out.push(ev)
+        }
         out.sort(function (a, b) { return a.startTime - b.startTime })
         return out
     }
-
-    // ── lanes (prototypes/lanes/lanes.ts) ────────────────────────────────────────
-    property date firstDay: { var d = new Date(); d.setHours(0, 0, 0, 0); return d }
-    readonly property int nDays: 14
-    property string laneBy: "venue"          // "venue" | "status" | "calendar"
-    function laneOf(o) {
-        if (laneBy === "calendar") return o.calendarId
-        var v = fieldOf(o, laneBy)
-        return v === "" ? "—" : v
-    }
-    function buildLanes(occs, cals) {
-        var lanes = [], index = {}
-        function addLane(id, label) { if (index[id] === undefined) { index[id] = lanes.length; lanes.push({ id: id, label: label }) } }
-        if (laneBy === "calendar") { for (var i = 0; i < cals.length; i++) addLane(cals[i].id, cals[i].name || "(unnamed)") }
-        else if (laneBy === "status") { for (var s = 0; s < statuses.length; s++) addLane(statuses[s], statuses[s]) }
-        var d0 = new Date(firstDay).getTime()
-        function dayStart(n) { var d = new Date(d0); d.setDate(d.getDate() + n); return d.getTime() }
-        var end = dayStart(nDays), inWin = []
-        for (var a = 0; a < occs.length; a++) if (occs[a].startTime >= d0 && occs[a].startTime < end) inWin.push(occs[a])
-        var noValue = false
-        for (var b = 0; b < inWin.length; b++) { var id = laneOf(inWin[b]); if (id === "—") { noValue = true; continue } addLane(id, id) }
-        if (noValue) addLane("—", laneBy === "venue" ? "No venue" : "—")
-        var days = []
-        for (var c = 0; c < nDays; c++) { var cells = []; for (var e = 0; e < lanes.length; e++) cells.push([]); days.push({ date: dayStart(c), cells: cells }) }
-        for (var g = 0; g < inWin.length; g++) {
-            var dd = new Date(inWin[g].startTime); dd.setHours(0, 0, 0, 0)
-            var row = -1
-            for (var r = 0; r < days.length; r++) if (days[r].date === dd.getTime()) { row = r; break }
-            var col = index[laneOf(inWin[g])]
-            if (row >= 0 && col !== undefined) days[row].cells[col].push(inWin[g])
-        }
-        return { lanes: lanes, days: days }
-    }
-    readonly property var shownCals: { var o = []; for (var i = 0; i < freqCals.length; i++) if (!hiddenCals[freqCals[i].id]) o.push(freqCals[i]); return o }
-    readonly property var grid: {
-        var ids = {}
-        for (var i = 0; i < shownCals.length; i++) ids[shownCals[i].id] = true
-        var src = []
-        for (var k = 0; k < events.length; k++) if (ids[events[k].calendarId]) src.push(events[k])
-        var d0 = new Date(firstDay).getTime()
-        return buildLanes(expandEvents(src, d0, d0 + (nDays + 1) * 864e5), shownCals)
-    }
-    function shiftDays(n) { var d = new Date(firstDay); d.setDate(d.getDate() + n); firstDay = d }
-    function rangeLabel() {
-        var a = new Date(firstDay), b = new Date(firstDay); b.setDate(b.getDate() + nDays - 1)
-        return Qt.formatDate(a, "d MMM") + " – " + Qt.formatDate(b, "d MMM yyyy")
-    }
-
-    // ── the selected night (right panel) ─────────────────────────────────────────
-    property var selected: null              // an occurrence
-    readonly property var selMaster: selected ? (eventById(selected.seriesId || selected.id) || selected) : null
-    readonly property var selCal: selMaster ? calById(selMaster.calendarId) : null
-    function canEdit(ev) {
-        var c = ev ? calById(ev.calendarId) : null
-        if (!c) return false
-        var me = c.authorAddr || ""
-        if (isEditorOf(c)) return true
-        var r = (c.roles || {})[me]
-        if (r === "viewer") return false
-        return c.collab === true || (!!ev.creatorId && ev.creatorId === me)
-    }
-    // Change one Freequencies field on the night (status / venue / type) — a normal Scala edit.
-    property bool saving: false
-    // Scala replaces a whole event on every edit (last write wins per event), so the edit is built on
-    // the freshest copy, fetched right before saving: a title or time someone changed since the board
-    // last refreshed is kept, not overwritten with the board's older copy.
-    function setField(key, value) {
-        var m = selMaster
-        if (!m || saving) return
-        saving = true
-        root.core("getEvent", [m.id], function (raw) {
-            var fresh = root.j(raw, null)
-            if (!fresh || typeof fresh !== "object" || fresh.id !== m.id) {
-                saving = false
-                root.notify("Couldn't load the night to change it. It may have been deleted.", true)
-                root.refresh()
-                return
-            }
-            var up = JSON.parse(JSON.stringify(fresh))
-            delete up.seriesId; delete up.occ; delete up.ext; delete up.rsvps
-            if (!up.calendarId) up.calendarId = m.calendarId
-            up.fields = (up.fields && typeof up.fields === "object") ? up.fields : {}
-            up.fields[key] = value
-            root.core("updateEvent", [JSON.stringify(up)], function (r) {
-                saving = false
-                if (String(root.j(r, "")) === m.id) { root.notify("Saved"); root.refresh() }
-                else root.notify("Couldn't save the change. You may not have edit rights on this calendar.", true)
-            })
-        })
-    }
-    function commentsOf(ev) {
-        var out = [], xs = (ev && ev.ext) || []
-        for (var i = 0; i < xs.length; i++) if (xs[i].ns === "scala" && xs[i].kind === "comment") out.push(xs[i])
-        return out
-    }
-    property bool commentBusy: false
-    function postComment(text) {
-        text = String(text || "").trim()
-        if (!text || commentBusy || !selMaster) return
-        commentBusy = true
-        var item = { ns: "scala", kind: "comment", target: selMaster.id, data: { text: text } }
-        root.core("postExt", [selMaster.calendarId, JSON.stringify(item)], function (r) {
-            commentBusy = false
-            var res = root.j(r, {})
-            if (res && res.ok) { commentInput.text = ""; root.refresh() }
-            else root.notify("Couldn't post the comment" + (res && res.error ? ": " + res.error : ". Update the ‘scala’ package to 0.12.0+."), true)
-        })
-    }
-    function deleteComment(id) {
-        root.core("deleteExt", [selMaster.calendarId, id], function (r) {
-            var res = root.j(r, {})
-            if (res && res.ok) root.refresh(); else root.notify("Couldn't delete the comment.", true)
-        })
-    }
-    // ── line-up (ADR 0004; mirrors mobile/src/app/lineup.ts) ─────────────────────
-    readonly property var bookingStatuses: ["asked", "confirmed", "cancelled"]
-    function str(v) { return typeof v === "string" ? v : "" }
-    function lineupOf(ev) {
-        var xs = (ev && Array.isArray(ev.ext)) ? ev.ext : [], out = []
-        for (var i = 0; i < xs.length; i++) {
-            var x = xs[i]
-            if (!x || x.ns !== "xyz.freequencies" || x.kind !== "artist" || !str(x.id)) continue
-            var d = (x.data && typeof x.data === "object") ? x.data : {}
-            var name = str(d.name).trim()
-            if (!name) continue
-            var fee = (typeof d.fee === "number" && isFinite(d.fee) && d.fee >= 0) ? d.fee : null
-            var st = str(d.status)
-            out.push({ id: str(x.id), author: str(x.author), name: name, contact: str(d.contact), book: str(d.book), fee: fee,
-                       currency: str(d.currency), set: str(d.set), status: bookingStatuses.indexOf(st) >= 0 ? st : "asked" })
-        }
-        out.sort(function (a, b) { return (a.set || "\uffff").localeCompare(b.set || "\uffff") || a.name.localeCompare(b.name) })
-        return out
-    }
-    function artistKey(b) { return b.contact ? "c:" + b.contact : "n:" + b.name.trim().toLowerCase() }
-    function feeLabel(b) { return b.fee === null ? "" : (b.currency ? b.fee + " " + b.currency : String(b.fee)) }
-    function feesTotal(bs) {
-        var m = {}, keys = []
-        for (var i = 0; i < bs.length; i++) {
-            var b = bs[i]
-            if (b.fee === null || b.status === "cancelled") continue
-            if (m[b.currency] === undefined) { m[b.currency] = 0; keys.push(b.currency) }
-            m[b.currency] += b.fee
-        }
-        var parts = []
-        for (var k = 0; k < keys.length; k++) parts.push(keys[k] ? m[keys[k]] + " " + keys[k] : String(m[keys[k]]))
-        return parts.join(" + ")
-    }
-    function bookingColor(st) { return st === "confirmed" ? cGreen : st === "cancelled" ? cRed : cYellow }
-    function cap(st) { return st.charAt(0).toUpperCase() + st.slice(1) }
-    function occKey(o) { return (o.seriesId || o.id) + "@" + o.occ }
-    function dayKey(t) { var d = new Date(t); return d.getFullYear() + "-" + d.getMonth() + "-" + d.getDate() }
-    // occKey → [{artist, other}] for nights on the board whose artist also plays a night that overlaps
-    // it or starts the same day.
-    readonly property var doubles: {
-        var ids = {}
-        for (var i = 0; i < freqCals.length; i++) ids[freqCals[i].id] = true
-        var src = []
-        for (var k = 0; k < events.length; k++) if (ids[events[k].calendarId]) src.push(events[k])
-        var d0 = new Date(firstDay).getTime()
-        var occs = expandEvents(src, d0 - 864e5, d0 + (nDays + 1) * 864e5)
-        var byArtist = {}, order = []
-        for (var a = 0; a < occs.length; a++) {
-            // Artists and named crew (ADR 0007): one person can't be in two places either way.
-            var seen = {}, lu = lineupOf(occs[a]).concat(crewOf(occs[a]).filter(function (c) { return !!c.name }))
-            for (var b = 0; b < lu.length; b++) {
-                if (lu[b].status === "cancelled") continue
-                var key = artistKey(lu[b])
-                if (seen[key]) continue
-                seen[key] = true
-                if (!byArtist[key]) { byArtist[key] = []; order.push(key) }
-                byArtist[key].push({ night: occs[a], name: lu[b].name })
-            }
-        }
-        var out = {}
-        for (var o = 0; o < order.length; o++) {
-            var list = byArtist[order[o]]
-            for (var x = 0; x < list.length; x++) for (var y = x + 1; y < list.length; y++) {
-                var p = list[x].night, q = list[y].night
-                if (occKey(p) === occKey(q)) continue
-                var overlap = p.startTime < q.endTime && q.startTime < p.endTime
-                if (!overlap && dayKey(p.startTime) !== dayKey(q.startTime)) continue
-                ;(out[occKey(p)] = out[occKey(p)] || []).push({ artist: list[x].name, other: q })
-                ;(out[occKey(q)] = out[occKey(q)] || []).push({ artist: list[y].name, other: p })
-            }
-        }
-        return out
-    }
-    function doubleLine(d) { return "⚠ " + d.artist + " is also booked at " + (d.other.title || "another night") + ", " + Qt.formatDateTime(new Date(d.other.startTime), "d MMM hh:mm") }
-
-    // Kith (the `kith` core module): every book's contacts, read when the artist picker opens.
-    property var kithArtists: []             // [{bookId, id, name}]
-    property string kithState: ""            // "" | "loading" | "ok" | "none" | "missing"
-    function loadKith() {
-        if (kithState === "loading") return
-        kithState = "loading"
-        callVia("kith", "listBooks", [], function (rb) {
-            var books = j(rb, null)
-            if (!Array.isArray(books)) { kithState = "missing"; return }
-            if (books.length === 0) { kithArtists = []; kithState = "none"; return }
-            var acc = [], left = books.length
-            for (var i = 0; i < books.length; i++) (function (book) {
-                var bid = str(book && book.id)
-                callVia("kith", "listContacts", [bid], function (rc) {
-                    var cs = j(rc, [])
-                    if (Array.isArray(cs)) for (var k = 0; k < cs.length; k++) {
-                        var c = cs[k], nm = (c && c.name && typeof c.name === "object") ? str(c.name.display).trim() : ""
-                        if (nm && str(c.id)) acc.push({ bookId: bid, id: str(c.id), name: nm })
-                    }
-                    if (--left === 0) { acc.sort(function (a, b) { return a.name.localeCompare(b.name) }); kithArtists = acc; kithState = "ok" }
-                })
-            })(books[i])
-        })
-    }
-    function kithName(b) {
-        if (b.contact) for (var i = 0; i < kithArtists.length; i++) if (kithArtists[i].id === b.contact) return kithArtists[i].name
-        return b.name
-    }
-
-    // artist popup state
-    property string aId: ""
-    property string aContact: ""
-    property string aBook: ""
-    property string aStatus: "asked"
-    property bool aMine: true
-    property bool aCanRemove: false
-    property string aQuery: ""
-    readonly property var aMatches: {
-        var q = aQuery.trim().toLowerCase(), out = []
-        for (var i = 0; i < kithArtists.length && out.length < 12; i++) if (!q || kithArtists[i].name.toLowerCase().indexOf(q) >= 0) out.push(kithArtists[i])
-        return out
-    }
-    function openArtist(b) {
-        if (!selMaster) return
-        var lu = lineupOf(selMaster)
-        aId = b ? b.id : ""; aContact = b ? b.contact : ""; aBook = b ? b.book : ""; aStatus = b ? b.status : "asked"
-        aMine = !b || (!!selCal && b.author === selCal.authorAddr)
-        aCanRemove = !!b && (aMine || isEditorOf(selCal))
-        aQuery = ""; aSearch.text = ""
-        aName.text = b ? b.name : ""; aSet.text = b ? b.set : ""
-        aFee.text = b && b.fee !== null ? String(b.fee) : ""
-        var cur = "EUR"
-        for (var i = 0; i < lu.length; i++) if (lu[i].currency) { cur = lu[i].currency; break }
-        aCur.text = b && b.currency ? b.currency : cur
-        artistPopup.open()
-        if (!b) loadKith()
-    }
-    property bool artistBusy: false
-    function saveArtist() {
-        if (!selMaster || artistBusy) return
-        var name = aName.text.trim()
-        if (!name) { notify("Pick an artist or type a name.", true); return }
-        var feeT = aFee.text.trim().replace(",", "."), fee = feeT === "" ? null : Number(feeT)
-        if (fee !== null && !(isFinite(fee) && fee >= 0)) { notify("The fee should be a number, for example 250 or 99.50.", true); return }
-        var data = { name: name, status: aStatus }
-        if (aContact) { data.contact = aContact; data.book = aBook }
-        if (fee !== null) { data.fee = fee; data.currency = aCur.text.trim().toUpperCase() }
-        if (aSet.text.trim()) data.set = aSet.text.trim()
-        var item = { ns: "xyz.freequencies", kind: "artist", target: selMaster.id, data: data }
-        var editId = aId
-        if (editId) item.id = editId
-        artistBusy = true
-        core("postExt", [selMaster.calendarId, JSON.stringify(item)], function (r) {
-            artistBusy = false
-            var res = j(r, {})
-            // Close only the popup this save came from (it may have been reopened for another booking meanwhile).
-            if (res && res.ok) { if (aId === editId) artistPopup.close(); notify(editId ? "Booking updated" : "Added " + name); refresh() }
-            else notify("Couldn't save the booking" + (res && res.error ? ": " + res.error : ". Update the ‘scala’ package to 0.12.0+."), true)
-        })
-    }
-    function removeArtist() {
-        if (!selMaster || !aId || artistBusy) return
-        var delId = aId
-        artistBusy = true
-        core("deleteExt", [selMaster.calendarId, delId], function (r) {
-            artistBusy = false
-            var res = j(r, {})
-            if (res && res.ok) { if (aId === delId) artistPopup.close(); notify("Removed from the line-up"); refresh() }
-            else notify("Couldn't remove the booking.", true)
-        })
-    }
-
-    // ── public copy (ADR 0008); mirrors mobile/src/app/publish.ts ─────────────────
-    function publicEventId(nightId) { return "pub-" + nightId }
-    function publicPrefix(nightId) { return "public:" + nightId + ":" }
-    function publicItemId(nightId) { return publicPrefix(nightId) + Math.random().toString(36).slice(2, 10) }
-    function publicLinkOf(ev) {
-        var nightId = str(ev && ev.id), xs = (ev && Array.isArray(ev.ext)) ? ev.ext : [], best = null
-        for (var i = 0; i < xs.length; i++) {
-            var x = xs[i]
-            if (!x || x.ns !== "xyz.freequencies" || x.kind !== "public" || !nightId || str(x.id).indexOf(publicPrefix(nightId)) !== 0) continue
-            var d = (x.data && typeof x.data === "object" && !Array.isArray(x.data)) ? x.data : {}
-            var cal = str(d.calendar)
-            if (!cal) continue
-            var h = (x.hlc && typeof x.hlc === "object") ? x.hlc : {}
-            var wall = typeof h.wall === "number" ? h.wall : 0, ctr = typeof h.ctr === "number" ? h.ctr : 0
-            if (!best || wall < best.wall || (wall === best.wall && (ctr < best.ctr || (ctr === best.ctr && str(x.id) < best.id))))
-                best = { id: str(x.id), author: str(x.author), calendar: cal, wall: wall, ctr: ctr }
-        }
-        return best ? { id: best.id, author: best.author, calendar: best.calendar } : null
-    }
-    // Club nights run past midnight: a set starting before noon comes after the evening's sets.
-    function setKey(set) {
-        var m = /(\d{1,2})[:.](\d{2})/.exec(set || "")
-        if (!m) return 1e6
-        var h = Number(m[1]), mi = Number(m[2])
-        return (h < 12 ? h + 24 : h) * 60 + mi
-    }
-    // Only what attendees may see: never the night's description, fees, crew, holds, comments.
-    function publicCopyOf(n, published) {
-        var f = (n.fields && typeof n.fields === "object") ? n.fields : {}
-        var cancelled = !published || str(f.status) === "Cancelled", lines = []
-        if (cancelled) lines.push("This night is off.")
-        else {
-            var acts = lineupOf(n).filter(function (b) { return b.status === "confirmed" })
-            acts.sort(function (a, b) { return setKey(a.set) - setKey(b.set) })
-            if (acts.length) { lines.push("Line-up:"); for (var i = 0; i < acts.length; i++) lines.push(acts[i].set ? acts[i].set + "  " + acts[i].name : acts[i].name) }
-            var xs = Array.isArray(n.ext) ? n.ext : []
-            for (var k = 0; k < xs.length; k++) {
-                var x = xs[k], d = (x && x.data && typeof x.data === "object") ? x.data : {}
-                if (x && x.ns === "xyz.freequencies" && x.kind === "form" && str(d.purpose) === "guestlist" && str(d.uri)) {
-                    if (lines.length) lines.push(""); lines.push("Guest list: " + str(d.uri)); break
-                }
-            }
-        }
-        return { title: (cancelled ? "Cancelled: " : "") + (str(n.title).trim() || "Untitled night"),
-                 startTime: n.startTime, endTime: n.endTime, allDay: n.allDay === true,
-                 location: str(f.venue).trim(), description: lines.join("\n"), recur: (n.recur === undefined ? null : n.recur) }
-    }
-    function canon(v) {
-        return JSON.stringify(v, function (k, x) {
-            if (!x || typeof x !== "object" || Array.isArray(x)) return x
-            var o = {}, ks = Object.keys(x).sort(); for (var i = 0; i < ks.length; i++) o[ks[i]] = x[ks[i]]; return o
-        })
-    }
-    function sameCopy(cur, want) {
-        if (!cur) return false
-        return str(cur.title) === want.title && cur.startTime === want.startTime && cur.endTime === want.endTime
-            && (cur.allDay === true) === want.allDay && str(cur.location) === want.location
-            && str(cur.description) === want.description && canon(cur.recur === undefined ? null : cur.recur) === canon(want.recur)
-    }
-    function copyToEvent(c) {
-        var e = { title: c.title, startTime: c.startTime, endTime: c.endTime }
-        if (c.allDay) e.allDay = true
-        if (c.location) e.location = c.location
-        if (c.description) e.description = c.description
-        if (c.recur !== null && c.recur !== undefined) e.recur = c.recur
-        return e
-    }
-    function isPublicTarget(calId) { var c = calById(calId); return !!c && !isFreqCal(c) }
-    function mirrorPlan() {
-        var freq = {}; for (var i = 0; i < calendars.length; i++) if (isFreqCal(calendars[i])) freq[calendars[i].id] = true
+    readonly property bool searching: root.searchQuery.trim() !== ""
+    readonly property var searchResults: root.searching ? root.eventsMatching(root.searchQuery, root.effectiveRange) : []
+    // ── month / week view ────────────────────────────────────────────────────
+    property string calMode: "month"   // "month" | "week"
+    function weekDaysOf(d) {
+        var mon = new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() + 6) % 7))
         var out = []
-        for (var k = 0; k < events.length; k++) {
-            var n = events[k]
-            if (!freq[n.calendarId]) continue
-            var pid = publicEventId(n.id), link = publicLinkOf(n), copies = [], targets = {}
-            for (var e = 0; e < events.length; e++) if (events[e].id === pid && isPublicTarget(events[e].calendarId)) { copies.push(events[e]); targets[events[e].calendarId] = true }
-            if (link && isPublicTarget(link.calendar)) targets[link.calendar] = true
-            for (var cal in targets) {
-                var want = publicCopyOf(n, !!link && link.calendar === cal), cur = null
-                for (var c = 0; c < copies.length; c++) if (copies[c].calendarId === cal) cur = copies[c]
-                if (!sameCopy(cur, want)) out.push({ calendarId: cal, id: pid, copy: want, nightId: n.id })
-            }
-        }
+        for (var i = 0; i < 7; i++) out.push(new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() + i))
         return out
     }
-    // After every refresh, bring each published night's public copy up to date. Only owners/editors of
-    // the public calendar write; for others the night says so.
-    property var mirrorBlocked: ({})
-    property var lastWritten: ({})
-    property bool mirroring: false
-    property bool putMissing: false          // scala core older than 0.12.4: no putEvent, so no copying
-    onEventsChanged: Qt.callLater(root.runMirror)
-    function runMirror() {
-        if (mirroring || putMissing) return
-        var plan = mirrorPlan(), blocked = {}, todo = []
-        for (var i = 0; i < plan.length; i++) {
-            var w = plan[i]
-            if (!isEditorOf(calById(w.calendarId))) { blocked[w.nightId] = true; continue }
-            var sig = JSON.stringify(copyToEvent(w.copy))
-            if (lastWritten[w.id + "@" + w.calendarId] !== sig) todo.push({ w: w, sig: sig })
-        }
-        mirrorBlocked = blocked
-        if (!todo.length) return
-        mirroring = true
-        var left = todo.length
-        for (var t = 0; t < todo.length; t++) (function (job) {
-            core("putEvent", [job.w.calendarId, job.w.id, JSON.stringify(copyToEvent(job.w.copy))], function (r) {
-                if (r === "" || r === undefined || r === null) putMissing = true
-                if (r === job.w.id || str(j(r, "")) === job.w.id) { var m = {}; for (var k in lastWritten) m[k] = lastWritten[k]; m[job.w.id + "@" + job.w.calendarId] = job.sig; lastWritten = m }
-                if (--left === 0) { mirroring = false; refresh() }
-            })
-        })(todo[t])
+    function weekLabel(d) {
+        var w = weekDaysOf(d); var a = w[0]; var b = w[6]
+        var mo = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
+        if (a.getMonth() === b.getMonth()) return a.getDate() + " – " + b.getDate() + " " + mo[a.getMonth()] + " " + a.getFullYear()
+        return a.getDate() + " " + mo[a.getMonth()] + " – " + b.getDate() + " " + mo[b.getMonth()] + " " + b.getFullYear()
     }
-    readonly property var publicTargets: { var o = []; for (var i = 0; i < calendars.length; i++) if (!isFreqCal(calendars[i]) && isEditorOf(calendars[i]) && calendars[i].open === false) o.push(calendars[i]); return o }
-    property bool pubBusy: false
-    function makePublic(calId) {
-        if (!selMaster || pubBusy) return
-        pubBusy = true
-        var item = { ns: "xyz.freequencies", kind: "public", target: selMaster.id, id: publicItemId(selMaster.id), data: { calendar: calId } }
-        core("postExt", [selMaster.calendarId, JSON.stringify(item)], function (r) {
-            pubBusy = false
-            var res = j(r, {})
-            if (res && res.ok) { pubPopup.close(); notify("Public: attendees will see it"); refresh() }
-            else notify("Couldn't make it public" + (res && res.error ? ": " + res.error : "."), true)
-        })
+    function goPrev() {
+        if (calMode === "week") { var d = new Date(selectedDay.getFullYear(), selectedDay.getMonth(), selectedDay.getDate() - 7); selectedDay = d; viewMonth = d }
+        else if (calMode === "day") { var dd = new Date(selectedDay.getFullYear(), selectedDay.getMonth(), selectedDay.getDate() - 1); selectedDay = dd; viewMonth = dd }
+        else viewMonth = new Date(viewMonth.getFullYear(), viewMonth.getMonth() - 1, 1)
     }
-    function newPublicCalendar() {
-        if (!selMaster || pubBusy || !selCal) return
-        pubBusy = true
-        core("createCalendar", [(selCal.name || "Our nights") + " (public)", selCal.color || "#89b4fa", ""], function (r) {
-            var id = str(j(r, ""))
-            if (!id) { pubBusy = false; notify("Couldn't create the calendar.", true); return }
-            core("updateCalendarMeta", [id, JSON.stringify({ open: false, description: "What's on. Published from Freequencies." })], function () {
-                pubBusy = false; makePublic(id)
-            })
-        })
+    function goNext() {
+        if (calMode === "week") { var d = new Date(selectedDay.getFullYear(), selectedDay.getMonth(), selectedDay.getDate() + 7); selectedDay = d; viewMonth = d }
+        else if (calMode === "day") { var dd = new Date(selectedDay.getFullYear(), selectedDay.getMonth(), selectedDay.getDate() + 1); selectedDay = dd; viewMonth = dd }
+        else viewMonth = new Date(viewMonth.getFullYear(), viewMonth.getMonth() + 1, 1)
     }
-    function stopPublic() {
-        var link = publicLinkOf(selMaster)
-        if (!selMaster || !link || pubBusy) return
-        pubBusy = true
-        core("deleteExt", [selMaster.calendarId, link.id], function (r) {
-            pubBusy = false
-            var res = j(r, {})
-            if (res && res.ok) { notify("No longer public: its copy now says Cancelled"); refresh() } else notify("Couldn't change it.", true)
-        })
-    }
-    function copyInvite(calId, role) {
-        core("createInvite", [calId, role], function (r) {
-            var res = j(r, {})
-            if (res && res.ok && str(res.link)) copyText(res.link); else notify("Couldn't make a link" + (res && res.error ? ": " + res.error : "."), true)
-        })
+    function pad(n) { return (n < 10 ? "0" : "") + n }
+    function fmtDateInput(d) { return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) }
+    function fmtTimeInput(d) { return pad(d.getHours()) + ":" + pad(d.getMinutes()) }
+    function parseDateTime(dateStr, timeStr) {
+        var dp = dateStr.split("-"), tp = timeStr.split(":")
+        var d = new Date()
+        if (dp.length === 3) d = new Date(parseInt(dp[0]), parseInt(dp[1]) - 1, parseInt(dp[2]))
+        d.setHours(tp.length >= 1 ? parseInt(tp[0]) || 0 : 0, tp.length >= 2 ? parseInt(tp[1]) || 0 : 0, 0, 0)
+        return d
     }
 
-    // ── crew (ADR 0007): crew slots (kind "crew") and check-ins (kind "checkin"); mirrors mobile/src/app/crew.ts ──
-    readonly property var crewRoles: ["Door", "Bar", "Sound", "Lights", "Security", "Cloakroom", "Runner"]
-    // A fresh id per check-in: Scala keeps a deleted ext id deleted, so "undo, then check in again"
-    // needs a new one. The slot is in the id so a check-in can't be filed under someone else's slot.
-    function checkinPrefix(slotId) { return "checkin:" + slotId + ":" }
-    function checkinId(slotId) { return checkinPrefix(slotId) + Math.random().toString(36).slice(2, 10) }
-    function crewOf(ev) {
-        var xs = (ev && Array.isArray(ev.ext)) ? ev.ext : [], ins = {}, out = []
-        for (var i = 0; i < xs.length; i++) {
-            var x = xs[i]
-            if (!x || x.ns !== "xyz.freequencies" || x.kind !== "checkin" || !str(x.id)) continue
-            var d = (x.data && typeof x.data === "object" && !Array.isArray(x.data)) ? x.data : {}
-            var slot = str(d.crew)
-            if (!slot || str(x.id).indexOf(checkinPrefix(slot)) !== 0) continue
-            var at = (typeof d.at === "number" && isFinite(d.at)) ? d.at : 0, prev = ins[slot]
-            // Two people checking the same person in at once: the earliest counts.
-            if (!prev || at < prev.at || (at === prev.at && str(x.id) < prev.id)) ins[slot] = { id: str(x.id), author: str(x.author), at: at }
-        }
-        for (var k = 0; k < xs.length; k++) {
-            var y = xs[k]
-            if (!y || y.ns !== "xyz.freequencies" || y.kind !== "crew" || !str(y.id)) continue
-            var e = (y.data && typeof y.data === "object" && !Array.isArray(y.data)) ? y.data : {}
-            var name = str(e.name).trim(), role = str(e.role).trim()
-            if (!name && !role) continue
-            var st = str(e.status), id = str(y.id)
-            out.push({ id: id, author: str(y.author), name: name, contact: name ? str(e.contact) : "", book: name ? str(e.book) : "",
-                       role: role, call: str(e.call).trim(), status: bookingStatuses.indexOf(st) >= 0 ? st : "asked",
-                       checkedIn: name ? (ins[id] || null) : null })
-        }
-        out.sort(function (a, b) {
-            return (a.role || "\uffff").localeCompare(b.role || "\uffff") || (a.call || "\uffff").localeCompare(b.call || "\uffff")
-                || (a.name ? 0 : 1) - (b.name ? 0 : 1) || a.name.localeCompare(b.name)
-        })
-        return out
-    }
-    function crewSummary(slots) {
-        var r = { people: 0, open: 0, confirmed: 0, here: 0 }
-        for (var i = 0; i < slots.length; i++) {
-            var c = slots[i]
-            if (c.status === "cancelled") continue
-            if (!c.name) { r.open++; continue }
-            r.people++
-            if (c.status === "confirmed") r.confirmed++
-            if (c.checkedIn) r.here++
-        }
-        return r
-    }
-    function crewSummaryLabel(sm) {
-        var parts = []
-        if (sm.people) parts.push(sm.people + " on")
-        if (sm.open) parts.push(sm.open + " open")
-        if (sm.here) parts.push(sm.here + " here")
-        return parts.join(" · ")
-    }
-    function crewShort(ev) {
-        var sm = crewSummary(crewOf(ev))
-        if (!sm.people && !sm.open) return ""
-        return "Crew " + sm.people + (sm.open ? " · " + sm.open + " open" : "")
-    }
+    // ── app-to-app intents: none. Scala answers the scala.* intents; Freequencies, a fork of Scala's
+    // view, declares no `provides` and leaves them to Scala (docs/issues/01-fork-scala-app.md).
 
-    // crew popup state
-    property string cId: ""
-    property string cContact: ""
-    property string cBook: ""
-    property string cStatus: "asked"
-    property bool cMine: true
-    property bool cCanRemove: false
-    property string cQuery: ""
-    readonly property var cMatches: {
-        var q = cQuery.trim().toLowerCase(), out = []
-        for (var i = 0; i < kithArtists.length && out.length < 12; i++) if (!q || kithArtists[i].name.toLowerCase().indexOf(q) >= 0) out.push(kithArtists[i])
-        return out
-    }
-    function openCrew(c) {
-        if (!selMaster) return
-        cId = c ? c.id : ""; cContact = c ? c.contact : ""; cBook = c ? c.book : ""; cStatus = c ? c.status : "asked"
-        cMine = !c || (!!selCal && c.author === selCal.authorAddr)
-        cCanRemove = !!c && (cMine || isEditorOf(selCal))
-        cQuery = ""; cSearch.text = ""
-        cName.text = c ? c.name : ""; cRole.text = c ? c.role : ""; cCall.text = c ? c.call : ""
-        crewPopup.open()
-        loadKith()
-    }
-    property bool crewBusy: false
-    function saveCrew() {
-        if (!selMaster || crewBusy) return
-        var name = cName.text.trim(), role = cRole.text.trim()
-        if (!name && !role) { notify("Give a role or a name. A role without a name is an open slot.", true); return }
-        var data = { name: name, role: role, status: cStatus }
-        if (name && cContact) { data.contact = cContact; data.book = cBook }
-        if (cCall.text.trim()) data.call = cCall.text.trim()
-        var item = { ns: "xyz.freequencies", kind: "crew", target: selMaster.id, data: data }
-        var editId = cId
-        if (editId) item.id = editId
-        crewBusy = true
-        core("postExt", [selMaster.calendarId, JSON.stringify(item)], function (r) {
-            crewBusy = false
-            var res = j(r, {})
-            if (res && res.ok) { if (cId === editId) crewPopup.close(); notify(editId ? "Crew updated" : name ? "Added " + name + " to the crew" : "Open slot added"); refresh() }
-            else notify("Couldn't save" + (res && res.error ? ": " + res.error : "."), true)
-        })
-    }
-    function removeCrew() {
-        if (!selMaster || !cId || crewBusy) return
-        var delId = cId
-        crewBusy = true
-        core("deleteExt", [selMaster.calendarId, delId], function (r) {
-            crewBusy = false
-            var res = j(r, {})
-            if (res && res.ok) { if (cId === delId) crewPopup.close(); notify("Removed from the crew"); refresh() }
-            else notify("Couldn't remove it.", true)
-        })
-    }
-    // Anyone on the door can check someone in; undoing is for whoever did it, or an editor.
-    function canUndoCheckin(c) { return !!c.checkedIn && ((!!selCal && c.checkedIn.author === selCal.authorAddr) || isEditorOf(selCal)) }
-    function toggleCheckin(c) {
-        if (!selMaster || crewBusy || !c.name) return
-        crewBusy = true
-        var done = function (r, what) {
-            crewBusy = false
-            var res = j(r, {})
-            if (res && res.ok) { notify(what); refresh() } else notify("Couldn't check in" + (res && res.error ? ": " + res.error : "."), true)
-        }
-        if (c.checkedIn) core("deleteExt", [selMaster.calendarId, c.checkedIn.id], function (r) { done(r, "Check-in undone") })
-        else core("postExt", [selMaster.calendarId, JSON.stringify({ ns: "xyz.freequencies", kind: "checkin", target: selMaster.id, id: checkinId(c.id),
-                                                                     data: { crew: c.id, at: Date.now() } })], function (r) { done(r, c.name + " is here") })
-    }
-
-    // ── forms (ADR 0005): WhisperBox forms attached to a night as ext items (kind "form") ──────
-    function wb(method, args, cb) { callVia("whisperbox_core", method, args, cb) }
-    readonly property var formPurposes: [
-        { id: "booking", label: "Artist booking" }, { id: "crew", label: "Crew sign-up" },
-        { id: "guestlist", label: "Guest list" }, { id: "feedback", label: "Feedback" }]
-    function purposeLabel(p) { for (var i = 0; i < formPurposes.length; i++) if (formPurposes[i].id === p) return formPurposes[i].label; return "Form" }
-    function formsOf(ev) {
-        var xs = (ev && Array.isArray(ev.ext)) ? ev.ext : [], out = []
-        for (var i = 0; i < xs.length; i++) {
-            var x = xs[i]
-            if (!x || x.ns !== "xyz.freequencies" || x.kind !== "form" || !str(x.id)) continue
-            var d = (x.data && typeof x.data === "object") ? x.data : {}
-            var fid = str(d.formId)
-            if (!fid) continue
-            out.push({ id: str(x.id), author: str(x.author), formId: fid, uri: str(d.uri), purpose: str(d.purpose), title: str(d.title) })
-        }
-        return out
-    }
-    // WhisperBox's state: forms by id (title, status, mine, questions) and, for my forms, the answers.
-    property var wbForms: ({})
-    property var wbSummaries: ({})          // formId -> formSummary (counts only for forms I can read)
-    function loadSummaries(ev) {
-        var fs = formsOf(ev)
-        for (var i = 0; i < fs.length; i++) (function (fid) {
-            wb("formSummary", [fid], function (r) {
-                var sm = j(r, null)
-                if (!sm || typeof sm !== "object" || sm.ok !== true) return
-                var m = {}; for (var k in wbSummaries) m[k] = wbSummaries[k]
-                m[fid] = sm; wbSummaries = m
-            })
-        })(fs[i].formId)
-    }
-    property var wbResponses: ({})
-    property string wbState: ""             // "" | "loading" | "ok" | "missing"
-    function loadWb() {
-        if (wbState === "loading") return
-        wbState = "loading"
-        wb("snapshot", [], function (r) {
-            var snap = j(r, null)
-            if (!snap || typeof snap !== "object" || !snap.state || typeof snap.state !== "object") { wbState = "missing"; return }
-            wbForms = (snap.state.forms && typeof snap.state.forms === "object") ? snap.state.forms : {}
-            wbResponses = (snap.creatorView && snap.creatorView.responses && typeof snap.creatorView.responses === "object") ? snap.creatorView.responses : {}
-            wbState = "ok"
-            loadSummaries(selMaster)
-        })
-    }
-    onSelMasterChanged: if (selMaster && formsOf(selMaster).length > 0) loadWb()
-    Timer { interval: 15000; repeat: true; running: root.ready && !!root.selMaster && root.formsOf(root.selMaster).length > 0; onTriggered: root.loadWb() }
-    function formLine(f) {
-        var sm = wbSummaries[f.formId]
-        if (!sm) return purposeLabel(f.purpose) + (wbState === "missing" ? " · WhisperBox isn't answering" : " · syncing…")
-        var parts = [purposeLabel(f.purpose), str(sm.status) === "closed" ? "Closed" : "Open"]
-        if (sm.canRead === true) {
-            var n = typeof sm.responses === "number" ? sm.responses : 0
-            parts.push(n + (n === 1 ? " response" : " responses"))
-            if (typeof sm.newResponses === "number" && sm.newResponses > 0) parts.push(sm.newResponses + " new")
-        } else parts.push("answers go to its creator")
-        return parts.join(" · ")
-    }
-    function formTitle(f) { var sm = wbSummaries[f.formId], w = wbForms[f.formId]; return (sm && str(sm.title)) || (w && str(w.title)) || f.title || purposeLabel(f.purpose) }
-
-    // WhisperBox's shared templates (templates.js is generated from whisperbox-sdk), titled for the night,
-    // so the desktop and Android offer the same forms (ADR 0005).
-    function formTemplate(purpose, ev) {
-        var when = Qt.formatDate(new Date(ev.startTime), "d MMM"), name = ev.title || "our night"
-        return Tpl.template(purpose, { title: purposeLabel(purpose) + ": " + name + " (" + when + ")" })
-    }
-    property bool formBusy: false
-    function addForm(purpose) {
-        if (!selMaster || formBusy) return
-        var ev = selMaster, def = formTemplate(purpose, selected || ev)
-        formBusy = true
-        wb("createForm", [JSON.stringify(def)], function (r) {
-            var res = j(r, {})
-            if (!res || !res.ok || !str(res.formId)) { formBusy = false; notify("Couldn't create the form" + (res && res.error ? ": " + res.error : ". Is the ‘whisperbox_core’ package installed?"), true); return }
-            var fid = str(res.formId)
-            wb("shareUri", [fid], function (r2) {
-                var su = j(r2, {}), uri = (su && su.ok) ? str(su.uri) : ""
-                var item = { ns: "xyz.freequencies", kind: "form", target: ev.id, id: fid, data: { formId: fid, uri: uri, purpose: purpose, title: def.title } }
-                core("postExt", [ev.calendarId, JSON.stringify(item)], function (r3) {
-                    formBusy = false
-                    var px = j(r3, {})
-                    if (px && px.ok) { formPopup.close(); notify("Form created. Copy its link to share it."); refresh(); loadWb() }
-                    else notify("The form was created in WhisperBox but couldn't be attached to the night" + (px && px.error ? ": " + px.error : "."), true)
-                })
-            })
-        })
-    }
-    function detachForm(f) {
-        if (!selMaster) return
-        core("deleteExt", [selMaster.calendarId, f.id], function (r) {
-            var res = j(r, {})
-            if (res && res.ok) { notify("Form removed from this night. It stays in WhisperBox."); refresh() } else notify("Couldn't remove the form.", true)
-        })
-    }
-    function copyText(t) { clipHelper.text = t; clipHelper.selectAll(); clipHelper.copy(); notify("Link copied") }
-    TextEdit { id: clipHelper; visible: false }
-
-    // responses viewer
-    property var respRows: []
-    property string respTitle: ""
-    function openResponses(f) {
-        respTitle = formTitle(f); respRows = []
-        respPopup.open()
-        wb("getDecryptedResponses", [f.formId], function (r) {
-            var res = j(r, {})
-            if (!res || !res.ok || !Array.isArray(res.responses)) { respRows = [{ head: "Couldn't read the answers", lines: [res && res.error ? str(res.error) : "Only the form's creator can read them."] }]; return }
-            var w = wbForms[f.formId] || {}, qs = Array.isArray(w.questions) ? w.questions : [], rows = []
-            for (var i = 0; i < res.responses.length; i++) {
-                var rr = res.responses[i] || {}, ans = Array.isArray(rr.answers) ? rr.answers : [], lines = []
-                for (var k = 0; k < ans.length; k++) {
-                    var a = ans[k] || {}, qq = null
-                    for (var m = 0; m < qs.length; m++) if (qs[m] && qs[m].id === a.questionId) { qq = qs[m]; break }
-                    lines.push((qq ? str(qq.text) : str(a.questionId)) + ": " + answerText(qq, a.value))
-                }
-                rows.push({ head: typeof rr.submittedAt === "number" ? Qt.formatDateTime(new Date(rr.submittedAt), "d MMM hh:mm") : "Answer " + (i + 1), lines: lines })
-            }
-            if (rows.length === 0) rows.push({ head: "No answers yet", lines: [] })
-            respRows = rows
-        })
-    }
-    function answerText(q, v) {
-        if (v === null || v === undefined || v === "") return "—"
-        var opts = (q && Array.isArray(q.options)) ? q.options : []
-        function one(x) { if (typeof x === "number" && opts[x] !== undefined) return String(opts[x]); if (x && typeof x === "object" && typeof x.other === "string") return x.other; return String(x) }
-        if (Array.isArray(v)) return v.map(one).join(", ")
-        if (typeof v === "boolean") return v ? "Yes" : "No"
-        return one(v)
-    }
-
-    function rsvpSummary(ev) {
-        var n = { going: 0, maybe: 0, no: 0 }, r = (ev && ev.rsvps) || {}
-        for (var k in r) if (n[r[k]] !== undefined) n[r[k]]++
-        return n.going + " going · " + n.maybe + " maybe · " + n.no + " no"
-    }
-
-    // ── toast ────────────────────────────────────────────────────────────────────
-    property string toastMsg: ""
-    property bool toastErr: false
-    function notify(msg, isErr) { toastMsg = msg; toastErr = !!isErr; toastTimer.restart() }
-    Timer { id: toastTimer; interval: 4000; onTriggered: root.toastMsg = "" }
-
-    // ── small components ─────────────────────────────────────────────────────────
-    component Chip: Rectangle {
-        id: chip
-        property string text: ""
-        property bool on: false
-        property color accent: root.cBlue
-        signal clicked()
-        height: 26; radius: 13; width: chipT.implicitWidth + 22
-        color: on ? root.cSurface : "transparent"; border.width: 1; border.color: on ? accent : root.cSurface2
-        LogosText { id: chipT; textFormat: Text.PlainText; anchors.centerIn: parent; text: chip.text; color: chip.on ? chip.accent : root.cSub; font.pixelSize: 12 }
-        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: chip.clicked() }
-    }
-    // Text input styled with the tokens (the DS TextField would otherwise be light on light).
-    component Input: TextField {
-        color: root.cText; font.pixelSize: 13
-        placeholderTextColor: root.cFaint
-        leftPadding: 10; rightPadding: 10; topPadding: 8; bottomPadding: 8
-        background: Rectangle { radius: 8; color: root.cBase; border.width: 1; border.color: parent.activeFocus ? root.cMauve : root.cSurface2 }
-    }
-    component Btn: Rectangle {
-        id: btn
-        property string text: ""
-        property bool primary: false
-        property bool enabled_: true
-        signal clicked()
-        height: 32; radius: 8; width: btnT.implicitWidth + 24
-        opacity: enabled_ ? 1 : 0.4
-        color: primary ? root.cMauve : (btnMA.containsMouse ? root.cSurface2 : root.cSurface)
-        LogosText { id: btnT; textFormat: Text.PlainText; anchors.centerIn: parent; text: btn.text; color: btn.primary ? root.cCrust : root.cText; font.pixelSize: 13; font.weight: Theme.typography.weightMedium }
-        MouseArea { id: btnMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: if (btn.enabled_) btn.clicked() }
-    }
-
+    // ── layout ───────────────────────────────────────────────────────────────
     Rectangle { anchors.fill: parent; color: root.cBase }
 
-    RowLayout {
-        anchors.fill: parent; spacing: 0
-
-        // ── sidebar: calendars ─────────────────────────────────────────────────
-        Rectangle {
-            Layout.fillHeight: true; Layout.preferredWidth: 210; color: root.cMantle
-            Flickable {
-                id: sideFlick
-                anchors.fill: parent; anchors.margins: 14; clip: true
-                contentWidth: width; contentHeight: sideCol.implicitHeight
-                boundsBehavior: Flickable.StopAtBounds
-                ScrollBar.vertical: ScrollBar {}
-            ColumnLayout {
-                id: sideCol
-                width: sideFlick.width; spacing: 8
-                LogosText { textFormat: Text.PlainText; text: "Freequencies"; color: root.cText; font.pixelSize: 20; font.weight: Theme.typography.weightMedium }
-                LogosText { textFormat: Text.PlainText; text: "Calendars"; color: root.cFaint; font.pixelSize: 11; Layout.topMargin: 8 }
-                LogosText { textFormat: Text.PlainText; visible: !root.loading && root.freqCals.length === 0; Layout.fillWidth: true; wrapMode: Text.Wrap; color: root.cSub; font.pixelSize: 12
-                    text: "None yet. Pick a Scala calendar below and choose “Use for Freequencies”, or create one in Scala first." }
-                Repeater {
-                    model: root.freqCals
-                    delegate: RowLayout {
-                        required property var modelData
-                        Layout.fillWidth: true; spacing: 8
-                        Rectangle {
-                            width: 12; height: 12; radius: 6
-                            color: root.hiddenCals[modelData.id] ? "transparent" : root.cMauve
-                            border.width: root.hiddenCals[modelData.id] ? 2 : 0; border.color: root.cSub
-                            MouseArea { anchors.fill: parent; anchors.margins: -4; cursorShape: Qt.PointingHandCursor; onClicked: root.toggleCal(parent.parent.modelData.id) }
-                        }
-                        LogosText { textFormat: Text.PlainText; text: modelData.name || "(unnamed)"; color: root.hiddenCals[modelData.id] ? root.cSub : root.cText; font.pixelSize: 14; elide: Text.ElideRight; Layout.fillWidth: true }
-                    }
-                }
-                LogosText { textFormat: Text.PlainText; visible: root.otherCals.length > 0; text: "Other Scala calendars"; color: root.cFaint; font.pixelSize: 11; Layout.topMargin: 12 }
-                Repeater {
-                    model: root.otherCals
-                    delegate: ColumnLayout {
-                        required property var modelData
-                        Layout.fillWidth: true; spacing: 2
-                        LogosText { textFormat: Text.PlainText; text: modelData.name || "(unnamed)"; color: root.cSub; font.pixelSize: 13; elide: Text.ElideRight; Layout.fillWidth: true }
-                        LogosText { textFormat: Text.PlainText
-                            readonly property string why: root.adoptBlocker(parent.modelData)
-                            text: why === "" ? "Use for Freequencies" : why
-                            color: why === "" ? root.cBlue : root.cFaint; font.pixelSize: 12; Layout.fillWidth: true; wrapMode: Text.Wrap
-                            MouseArea { anchors.fill: parent; enabled: parent.why === ""; cursorShape: Qt.PointingHandCursor; onClicked: root.adoptCalendar(parent.parent.modelData) }
-                        }
-                    }
-                }
-                Item { Layout.preferredHeight: 12 }
-                LogosText { textFormat: Text.PlainText; Layout.fillWidth: true; wrapMode: Text.Wrap; color: root.cFaint; font.pixelSize: 11
-                    text: "Nights are Scala events: they also show in Scala, and comments are shared." }
+    // Stale-core warning: core + view are separate Basecamp packages, so a fresh view can run over an
+    // old core that signs with the wrong identity. Warn loudly at the top rather than fail silently.
+    Rectangle {
+        id: staleCoreBanner
+        visible: root.coreOutOfDate
+        anchors { top: parent.top; left: parent.left; right: parent.right }
+        height: visible ? bannerCol.implicitHeight + 18 : 0
+        z: 9999
+        color: "#f38ba8"
+        ColumnLayout {
+            id: bannerCol
+            anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; leftMargin: 16; rightMargin: 16 }
+            spacing: 1
+            LogosText { textFormat: Text.PlainText;
+                text: "⚠  Scala core is out of date" + (root.coreVer ? " (v" + root.coreVer + ")" : "")
+                color: "#11111b"; font.pixelSize: 14; font.weight: Theme.typography.weightMedium
             }
+            LogosText { textFormat: Text.PlainText;
+                Layout.fillWidth: true; wrapMode: Text.WordWrap
+                text: "Update the ‘scala’ package to " + root.minCore + "+ in Basecamp — until then, events may be signed with the wrong identity."
+                color: "#11111b"; font.pixelSize: 12
+            }
+        }
+    }
+
+    // Writes on a calendar bound to a Loam identity wait (unsigned, unpublished) while Loam is locked or
+    // has no root. Say so, and say what to do — never drop or publish them silently.
+    Rectangle {
+        id: hdBanner
+        visible: (root.hdSign.pending || 0) > 0 && (root.hdSign.error || "") !== ""
+        anchors { top: staleCoreBanner.bottom; left: parent.left; right: parent.right }
+        height: visible ? hdBannerT.implicitHeight + 16 : 0
+        z: 9998
+        color: "#3a2f1a"
+        LogosText { textFormat: Text.PlainText; id: hdBannerT
+            anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; leftMargin: 16; rightMargin: 16 }
+            text: root.hdSignMessage(); color: root.cYellow; font.pixelSize: 13; wrapMode: Text.WordWrap }
+    }
+
+    // ── "starting soon" banner (in-app substitute for desktop notifications) ──
+    property var soonOcc: null          // the imminent occurrence, or null
+    property string soonText: ""        // "<title> starts in <N> min"
+    property bool soonVisible: false
+    property real dismissedOcc: -1      // occ timestamp the user dismissed
+    // Honours each event's reminder (None / 10 min / 30 min / 1 hour / 1 day; default 10 min), like the
+    // phone: the banner appears once now is within that lead of the start.
+    function reminderLeadMs(ev) {
+        var m = (ev && typeof ev.reminderMin === "number") ? ev.reminderMin : 10
+        return Math.max(0, Math.min(1440, m)) * 60000
+    }
+    function soonLabel(ms) {
+        var mins = Math.max(0, Math.round(ms / 60000))
+        if (mins < 60) return "in " + mins + " min"
+        if (mins < 24 * 60) { var h = Math.round(mins / 60); return "in " + h + " hour" + (h === 1 ? "" : "s") }
+        return "tomorrow"
+    }
+    function computeSoon() {
+        var now = Date.now()
+        var occ = root.expandEvents(root.events, now, now + 1440 * 60000 + 60000)
+        var best = null
+        for (var i = 0; i < occ.length; i++) {
+            var o = occ[i], lead = root.reminderLeadMs(o)
+            if (o.allDay || lead === 0 || o.startTime < now || now < o.startTime - lead || o.occ === root.dismissedOcc) continue
+            best = o; break
+        }
+        if (best) {
+            root.soonText = (best.title || "(untitled)") + " starts " + root.soonLabel(best.startTime - now)
+                + (root.soonLabel(best.startTime - now) === "tomorrow" ? " at " + Qt.formatTime(new Date(best.startTime), "hh:mm") : "")
+            root.soonOcc = best
+            root.soonVisible = true
+        } else {
+            root.soonOcc = best
+            root.soonVisible = false
+        }
+    }
+
+    Rectangle {
+        id: soonBanner
+        anchors.top: parent.top; anchors.left: parent.left; anchors.right: parent.right
+        height: (root.soonVisible && root.soonText.length > 0) ? 40 : 0
+        visible: height > 0
+        clip: true
+        color: root.cBlue
+        RowLayout {
+            anchors.fill: parent
+            anchors.leftMargin: Theme.spacing.medium; anchors.rightMargin: Theme.spacing.small
+            spacing: Theme.spacing.small
+            Rectangle { width: 8; height: 8; radius: 4; color: root.cBase; Layout.alignment: Qt.AlignVCenter }
+            LogosText { textFormat: Text.PlainText;
+                text: root.soonText; color: root.cBase
+                font.pixelSize: 13; font.weight: Theme.typography.weightMedium
+                Layout.fillWidth: true; elide: Text.ElideRight; Layout.alignment: Qt.AlignVCenter
+            }
+            LogosText { textFormat: Text.PlainText;
+                text: "✕"; color: root.cBase; font.pixelSize: 14; Layout.alignment: Qt.AlignVCenter
+                MouseArea {
+                    anchors.fill: parent; anchors.margins: -6
+                    onClicked: {
+                        if (root.soonOcc) root.dismissedOcc = root.soonOcc.occ
+                        root.soonVisible = false
+                    }
+                }
+            }
+        }
+    }
+
+    // 3 resizable panes: calendars | month | agenda. Drag the dividers to resize.
+    SplitView {
+        anchors.top: soonBanner.bottom; anchors.left: parent.left
+        anchors.right: parent.right; anchors.bottom: parent.bottom
+        orientation: Qt.Horizontal
+
+        // ── pane 1: calendars sidebar ──────────────────────────────────────
+        Rectangle {
+            SplitView.preferredWidth: 240
+            SplitView.minimumWidth: 170
+            color: root.cMantle
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: Theme.spacing.medium
+                spacing: Theme.spacing.small
+
+                LogosText { textFormat: Text.PlainText; text: "Calendars"; color: root.cText; font.pixelSize: 18; font.weight: Theme.typography.weightMedium }
+
+                Rectangle {
+                    Layout.fillWidth: true; height: 36; radius: 9
+                    color: root.filterCalId === "" ? root.cSurface : (allCalMA.containsMouse ? root.cBase : "transparent")
+                    RowLayout {
+                        anchors.fill: parent; anchors.leftMargin: Theme.spacing.small; anchors.rightMargin: Theme.spacing.small; spacing: Theme.spacing.small
+                        Rectangle { width: 10; height: 10; radius: 5; color: root.cFaint }
+                        LogosText { textFormat: Text.PlainText; text: "All calendars"; color: root.cText; font.pixelSize: 14; Layout.fillWidth: true; elide: Text.ElideRight }
+                    }
+                    MouseArea { id: allCalMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.filterCalId = "" }
+                }
+
+                ListView {
+                    Layout.fillWidth: true; Layout.fillHeight: true; clip: true
+                    model: root.calendars
+                    spacing: 2
+                    delegate: Rectangle {
+                        id: calRow
+                        width: ListView.view.width
+                        height: (modelData.description && modelData.description.length > 0) ? 50 : 36
+                        radius: 9
+                        color: root.filterCalId === modelData.id ? root.cSurface : (calRowMA.containsMouse ? root.cBase : "transparent")
+                        RowLayout {
+                            anchors.fill: parent; anchors.leftMargin: Theme.spacing.small; anchors.rightMargin: Theme.spacing.small; spacing: Theme.spacing.small
+                            // Tap the dot to show/hide this calendar in the combined views (local only).
+                            Rectangle {
+                                width: 14; height: 14; radius: 7; Layout.alignment: Qt.AlignVCenter
+                                color: root.calHidden(modelData.id) ? "transparent" : root.calColor(modelData.id)
+                                border.width: root.calHidden(modelData.id) ? 2 : 0; border.color: root.cSub
+                                MouseArea { anchors.fill: parent; anchors.margins: -3; cursorShape: Qt.PointingHandCursor
+                                    onClicked: root.toggleCalVisible(modelData.id) }
+                            }
+                            ColumnLayout {
+                                Layout.fillWidth: true; Layout.alignment: Qt.AlignVCenter; spacing: 1
+                                RowLayout {
+                                    Layout.fillWidth: true; spacing: 4
+                                    LogosText { textFormat: Text.PlainText; text: modelData.name || "(unnamed)"; color: root.calHidden(modelData.id) ? root.cSub : root.cText; font.pixelSize: 14; Layout.fillWidth: true; elide: Text.ElideRight }
+                                    // 🔑 = this calendar is signed with a Keycard, so every edit needs a card tap.
+                                    LogosText { textFormat: Text.PlainText; visible: root.calIsKeycard(modelData.id); text: "🔑"; font.pixelSize: 12; Layout.alignment: Qt.AlignVCenter }
+                                }
+                                LogosText { textFormat: Text.PlainText;
+                                    visible: !!modelData.description && modelData.description.length > 0
+                                    text: modelData.description || ""
+                                    color: root.cFaint; font.pixelSize: 11; Layout.fillWidth: true; elide: Text.ElideRight
+                                }
+                            }
+                            LogosText { textFormat: Text.PlainText;
+                                text: "⚙"; color: root.cSub; font.pixelSize: 14; Layout.alignment: Qt.AlignVCenter
+                                MouseArea { anchors.fill: parent; anchors.margins: -4; cursorShape: Qt.PointingHandCursor; onClicked: root.openCalSettings(modelData) }
+                            }
+                            LogosText { textFormat: Text.PlainText;
+                                text: "share"; color: root.cBlue; font.pixelSize: 12; Layout.alignment: Qt.AlignVCenter
+                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.openShare(modelData) }
+                            }
+                            LogosText { textFormat: Text.PlainText;
+                                text: "✕"; color: root.cFaint; font.pixelSize: 14; Layout.alignment: Qt.AlignVCenter
+                                MouseArea {
+                                    anchors.fill: parent; anchors.margins: -4; cursorShape: Qt.PointingHandCursor
+                                    onClicked: root.confirmDeleteCalendar(modelData)
+                                }
+                            }
+                        }
+                        MouseArea { id: calRowMA; anchors.fill: parent; z: -1; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.filterCalId = modelData.id }
+                    }
+                }
+
+                // Field filter (every view): enum values and yes/no fields of the shown calendars.
+                ColumnLayout {
+                    visible: root.fieldChoices.length > 0
+                    Layout.fillWidth: true; Layout.topMargin: Theme.spacing.small; spacing: 6
+                    RowLayout {
+                        Layout.fillWidth: true
+                        LogosText { textFormat: Text.PlainText; text: "Filter"; color: root.cFaint; font.pixelSize: 11; Layout.fillWidth: true }
+                        LogosText { textFormat: Text.PlainText; visible: !!root.activeFilter; text: "clear"; color: root.cBlue; font.pixelSize: 11
+                            MouseArea { anchors.fill: parent; anchors.margins: -4; cursorShape: Qt.PointingHandCursor; onClicked: root.fieldFilter = null } }
+                    }
+                    Flow {
+                        Layout.fillWidth: true; spacing: 6
+                        Repeater {
+                            model: root.fieldChoices
+                            delegate: Rectangle {
+                            required property var modelData
+                            readonly property bool on: !!root.activeFilter && root.activeFilter.key === modelData.key && root.activeFilter.value === modelData.value
+                            height: 26; radius: 13; width: Math.min(200, chipLblF.implicitWidth + 20)
+                            color: on ? root.cSurface : "transparent"; border.width: 1; border.color: on ? root.cBlue : root.cSurface2
+                            LogosText { id: chipLblF; textFormat: Text.PlainText; anchors.centerIn: parent; width: Math.min(implicitWidth, parent.width - 16); elide: Text.ElideRight
+                                text: modelData.label; color: parent.on ? root.cBlue : root.cSub; font.pixelSize: 12 }
+                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.fieldFilter = parent.on ? null : { key: modelData.key, value: modelData.value } }
+                        }
+                        }
+                    }
+                }
+
+                Rectangle {
+                    Layout.fillWidth: true; implicitHeight: 40; radius: 9
+                    color: newCalMA.containsMouse ? root.cSurface2 : root.cSurface
+                    LogosText { textFormat: Text.PlainText; anchors.centerIn: parent; text: "+ New calendar"; color: root.cText; font.pixelSize: 14; font.weight: Theme.typography.weightMedium }
+                    MouseArea { id: newCalMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: newCalPopup.open() }
+                }
+                Rectangle {
+                    Layout.fillWidth: true; implicitHeight: 40; radius: 9
+                    color: joinMA.containsMouse ? root.cSurface : "transparent"
+                    border.width: 1; border.color: root.cSurface2
+                    LogosText { textFormat: Text.PlainText; anchors.centerIn: parent; text: "Join calendar"; color: root.cText; font.pixelSize: 14 }
+                    MouseArea { id: joinMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: joinPopup.open() }
+                }
+                Rectangle {
+                    Layout.fillWidth: true; implicitHeight: 40; radius: 9
+                    color: idsMA.containsMouse ? root.cSurface : "transparent"
+                    border.width: 1; border.color: root.cSurface2
+                    LogosText { textFormat: Text.PlainText; anchors.centerIn: parent; text: "👤 Identities"; color: root.cText; font.pixelSize: 14 }
+                    MouseArea { id: idsMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { root.refreshIdentities(); identitiesPopup.open() } }
+                }
             }
         }
 
-        // ── board: lanes ───────────────────────────────────────────────────────
-        ColumnLayout {
-            Layout.fillWidth: true; Layout.fillHeight: true; Layout.margins: 14; spacing: 10
-            RowLayout {
-                Layout.fillWidth: true; spacing: 8
-                Btn { text: "‹"; onClicked: root.shiftDays(-7) }
-                Btn { text: "Today"; onClicked: { var d = new Date(); d.setHours(0, 0, 0, 0); root.firstDay = d } }
-                Btn { text: "›"; onClicked: root.shiftDays(7) }
-                LogosText { textFormat: Text.PlainText; text: root.rangeLabel(); color: root.cText; font.pixelSize: 18; font.weight: Theme.typography.weightMedium; Layout.leftMargin: 6 }
-                Item { Layout.fillWidth: true }
-                Btn { text: "+ New night"; primary: true; enabled_: root.freqCals.length > 0; onClicked: root.openNew() }
-            }
-            RowLayout {
-                spacing: 6
-                LogosText { textFormat: Text.PlainText; text: "Columns:"; color: root.cFaint; font.pixelSize: 12 }
-                Chip { text: "By venue"; on: root.laneBy === "venue"; onClicked: root.laneBy = "venue" }
-                Chip { text: "By status"; on: root.laneBy === "status"; onClicked: root.laneBy = "status" }
-                Chip { text: "By calendar"; on: root.laneBy === "calendar"; onClicked: root.laneBy = "calendar" }
-                LogosText { textFormat: Text.PlainText; text: "Double-click an empty cell to add a night there"; color: root.cFaint; font.pixelSize: 11; Layout.leftMargin: 10 }
-            }
-            LogosText { textFormat: Text.PlainText; visible: root.loadError !== ""; text: root.loadError; color: root.cRed; font.pixelSize: 13; Layout.fillWidth: true; wrapMode: Text.Wrap }
-            LogosText { textFormat: Text.PlainText; visible: !root.loading && root.loadError === "" && root.grid.lanes.length === 0
-                text: root.freqCals.length ? "No nights in these two weeks. Add one with “+ New night”." : "Set up a calendar on the left to start."
-                color: root.cSub; font.pixelSize: 14 }
+        // ── pane 2: month ──────────────────────────────────────────────────
+        Rectangle {
+            SplitView.fillWidth: true
+            SplitView.minimumWidth: 380
+            color: root.cBase
+            ColumnLayout {
+            anchors.fill: parent
+            spacing: 0
 
-            Flickable {
-                id: boardFlick
-                Layout.fillWidth: true; Layout.fillHeight: true; clip: true
-                contentWidth: board.width; contentHeight: board.height
-                ScrollBar.vertical: ScrollBar {}
-                ScrollBar.horizontal: ScrollBar {}
-                Column {
-                    id: board
-                    readonly property int dateW: 64
-                    readonly property int cellW: 150
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.margins: Theme.spacing.medium
+                spacing: Theme.spacing.small
+                Rectangle {
+                    implicitWidth: 34; implicitHeight: 34; radius: 9
+                    color: navPrev.containsMouse ? root.cSurface2 : root.cSurface
+                    LogosText { textFormat: Text.PlainText; anchors.centerIn: parent; text: "‹"; color: root.cText; font.pixelSize: 18 }
+                    MouseArea { id: navPrev; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                        onClicked: root.goPrev() }
+                }
+                Rectangle {
+                    implicitWidth: 34; implicitHeight: 34; radius: 9
+                    color: navNext.containsMouse ? root.cSurface2 : root.cSurface
+                    LogosText { textFormat: Text.PlainText; anchors.centerIn: parent; text: "›"; color: root.cText; font.pixelSize: 18 }
+                    MouseArea { id: navNext; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                        onClicked: root.goNext() }
+                }
+                LogosText { textFormat: Text.PlainText;
+                    text: root.calMode === "week" ? root.weekLabel(root.selectedDay)
+                        : root.calMode === "day" ? Qt.formatDate(root.selectedDay, "dddd, MMMM d")
+                        : root.monthNames[root.viewMonth.getMonth()] + " " + root.viewMonth.getFullYear()
+                    color: root.cText; font.pixelSize: 20; font.weight: Theme.typography.weightMedium
+                    Layout.leftMargin: 4
+                }
+                // Month / Week segmented toggle
+                Rectangle {
+                    implicitWidth: modeRow.implicitWidth + 6; implicitHeight: 30; radius: 8
+                    color: root.cSurface; Layout.leftMargin: 6
                     Row {
-                        Item { width: board.dateW; height: 30 }
+                        id: modeRow; anchors.centerIn: parent; spacing: 2
                         Repeater {
-                            model: root.grid.lanes
-                            delegate: Item {
-                                required property var modelData
-                                width: board.cellW; height: 30
-                                Rectangle { visible: root.laneBy === "status"; width: 10; height: 10; radius: 5; x: 6; anchors.verticalCenter: parent.verticalCenter; color: root.statusColor(parent.modelData.id) }
-                                LogosText { textFormat: Text.PlainText; text: parent.modelData.label; color: root.cText; font.pixelSize: 13; font.weight: Theme.typography.weightMedium
-                                    elide: Text.ElideRight; x: root.laneBy === "status" ? 22 : 6; width: board.cellW - x - 6; anchors.verticalCenter: parent.verticalCenter }
+                            model: [{ m: "month", t: "Month" }, { m: "week", t: "Week" }, { m: "day", t: "Day" }]
+                            Rectangle {
+                                width: segT.implicitWidth + 18; height: 26; radius: 7
+                                color: root.calMode === modelData.m ? root.cBlue : "transparent"
+                                LogosText { textFormat: Text.PlainText; id: segT; anchors.centerIn: parent; text: modelData.t
+                                    color: root.calMode === modelData.m ? root.cCrust : root.cSub; font.pixelSize: 12 }
+                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.calMode = modelData.m }
                             }
                         }
                     }
-                    Repeater {
-                        model: root.grid.days
-                        delegate: Row {
-                            id: dayRow
-                            required property var modelData
-                            readonly property bool isToday: new Date(modelData.date).toDateString() === new Date().toDateString()
-                            readonly property bool weekend: { var g = new Date(modelData.date).getDay(); return g === 5 || g === 6 }
+                }
+                Rectangle {
+                    implicitWidth: todayT.implicitWidth + 26; implicitHeight: 30; radius: 15
+                    color: todayMA.containsMouse ? root.cSurface : "transparent"
+                    border.width: 1; border.color: root.cSurface2
+                    Layout.leftMargin: 4
+                    LogosText { textFormat: Text.PlainText; id: todayT; anchors.centerIn: parent; text: "Today"; color: root.cSub; font.pixelSize: 13 }
+                    MouseArea { id: todayMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                        onClicked: { var n = new Date(); root.viewMonth = n; root.selectedDay = n } }
+                }
+                Item { Layout.fillWidth: true }
+                Rectangle {
+                    implicitWidth: dbgT.implicitWidth + 22; implicitHeight: 30; radius: 8
+                    color: dbgMA.containsMouse ? root.cSurface : "transparent"
+                    LogosText { textFormat: Text.PlainText; id: dbgT; anchors.centerIn: parent; text: "Debug"; color: root.cFaint; font.pixelSize: 12 }
+                    MouseArea { id: dbgMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.openDiag() }
+                }
+                Rectangle {
+                    implicitWidth: addT.implicitWidth + 30; implicitHeight: 34; radius: 9
+                    color: addMA.containsMouse ? Qt.darker(root.cBlue, 1.12) : root.cBlue
+                    LogosText { textFormat: Text.PlainText; id: addT; anchors.centerIn: parent; text: "+ Event"; color: root.cCrust; font.pixelSize: 13; font.weight: Theme.typography.weightMedium }
+                    MouseArea { id: addMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.openNewEvent() }
+                }
+            }
+
+            RowLayout {
+                visible: root.calMode === "month"
+                Layout.fillWidth: true; Layout.leftMargin: Theme.spacing.medium; Layout.rightMargin: Theme.spacing.medium; spacing: 2
+                Repeater {
+                    model: root.weekDays
+                    LogosText { textFormat: Text.PlainText; text: modelData; color: root.cSub; font.pixelSize: 11; font.weight: Theme.typography.weightMedium; horizontalAlignment: Text.AlignHCenter; Layout.fillWidth: true }
+                }
+            }
+
+            GridLayout {
+                id: grid
+                visible: root.calMode === "month"
+                Layout.fillWidth: true; Layout.fillHeight: true   // month fills the pane now
+                Layout.leftMargin: Theme.spacing.medium; Layout.rightMargin: Theme.spacing.medium
+                Layout.topMargin: 4; Layout.bottomMargin: Theme.spacing.medium
+                columns: 7; rowSpacing: 2; columnSpacing: 2
+
+                Repeater {
+                    model: 42
+                    delegate: Rectangle {
+                        id: cell
+                        Layout.fillWidth: true; Layout.fillHeight: true
+                        radius: 10
+                        property date cellDate: {
+                            var first = new Date(root.viewMonth.getFullYear(), root.viewMonth.getMonth(), 1)
+                            var offset = (first.getDay() + 6) % 7
+                            return new Date(first.getFullYear(), first.getMonth(), 1 - offset + index)
+                        }
+                        property bool inMonth: cellDate.getMonth() === root.viewMonth.getMonth()
+                        property bool isToday: root.sameDay(cellDate, new Date())
+                        property bool isSel: root.sameDay(cellDate, root.selectedDay)
+                        color: isSel ? root.cSurface : (cellMA.containsMouse ? root.cMantle : "transparent")
+                        border.width: isSel ? 1 : 0
+                        border.color: root.cBlue
+
+                        Column {
+                            anchors.left: parent.left; anchors.top: parent.top; anchors.right: parent.right; anchors.margins: 7; spacing: 4
+                            // today = a filled accent circle behind the date (Google-style); else a plain number
                             Rectangle {
-                                width: board.dateW; height: cellsRow.height
-                                color: dayRow.weekend ? root.cMantle : "transparent"
-                                Column {
-                                    anchors.verticalCenter: parent.verticalCenter; x: 6
-                                    LogosText { textFormat: Text.PlainText; text: Qt.formatDate(new Date(dayRow.modelData.date), "ddd"); color: dayRow.isToday ? root.cYellow : root.cSub; font.pixelSize: 12 }
-                                    LogosText { textFormat: Text.PlainText; text: Qt.formatDate(new Date(dayRow.modelData.date), "d MMM"); color: dayRow.isToday ? root.cYellow : root.cSub; font.pixelSize: 12 }
+                                width: 22; height: 22; radius: 11
+                                color: cell.isToday ? root.cYellow : "transparent"
+                                LogosText { textFormat: Text.PlainText;
+                                    anchors.centerIn: parent
+                                    text: cell.cellDate.getDate()
+                                    color: cell.isToday ? root.cCrust : (cell.inMonth ? root.cText : root.cFaint)
+                                    font.pixelSize: 13
+                                    font.weight: cell.isToday ? Theme.typography.weightMedium : Font.Normal
                                 }
                             }
                             Row {
-                                id: cellsRow
+                                spacing: 3
                                 Repeater {
-                                    model: dayRow.modelData.cells
-                                    delegate: Rectangle {
-                                        id: cell
-                                        required property var modelData
-                                        required property int index
-                                        width: board.cellW; height: Math.max(48, cellCol.implicitHeight + 8)
-                                        color: dayRow.weekend ? root.cMantle : "transparent"; border.width: 1; border.color: root.cSurface2
-                                        Column {
-                                            id: cellCol
-                                            x: 4; y: 4; width: board.cellW - 8; spacing: 4
-                                            Repeater {
-                                                model: cell.modelData
-                                                delegate: Rectangle {
-                                                    id: night
-                                                    required property var modelData
-                                                    readonly property string status: root.fieldOf(modelData, "status")
-                                                    readonly property string crew: root.crewShort(root.eventById(modelData.seriesId || modelData.id))   // modelData is a converted copy; its ext isn't a JS array
-                                                    readonly property bool isSel: !!root.selected && root.selected.id === modelData.id && root.selected.occ === modelData.occ
-                                                    width: cellCol.width; height: crew ? 60 : 46; radius: 6
-                                                    color: isSel ? root.cSurface2 : root.cSurface
-                                                    border.width: isSel ? 1 : 0; border.color: root.cMauve
-                                                    Rectangle { width: 4; height: parent.height; radius: 2; color: root.statusColor(night.status) }
-                                                    Column {
-                                                        x: 10; anchors.verticalCenter: parent.verticalCenter; width: parent.width - 14; spacing: 1
-                                                        LogosText { textFormat: Text.PlainText; width: parent.width; elide: Text.ElideRight; font.pixelSize: 12; color: root.cText
-                                                            font.strikeout: night.status === "Cancelled"
-                                                            text: night.modelData.title || "(untitled)" }
-                                                        LogosText { textFormat: Text.PlainText; width: parent.width; elide: Text.ElideRight; font.pixelSize: 11
-                                                            color: root.doubles[root.occKey(night.modelData)] ? root.cYellow : root.cSub
-                                                            text: (root.doubles[root.occKey(night.modelData)] ? "⚠ " : "") + (night.modelData.allDay ? "All day" : Qt.formatTime(new Date(night.modelData.startTime), "hh:mm"))
-                                                                + (root.laneBy !== "venue" && root.fieldOf(night.modelData, "venue") ? " · " + root.fieldOf(night.modelData, "venue") : "")
-                                                                + (night.status && root.laneBy !== "status" ? " · " + night.status : "") }
-                                                        LogosText { textFormat: Text.PlainText; width: parent.width; elide: Text.ElideRight; font.pixelSize: 11; color: root.cSub
-                                                            visible: night.crew !== ""; text: night.crew }
-                                                    }
-                                                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.selected = night.modelData }
-                                                }
-                                            }
+                                    model: root.dotsOnDay(cell.cellDate)
+                                    Rectangle { width: 6; height: 6; radius: 3; color: modelData }
+                                }
+                            }
+                        }
+                        MouseArea { id: cellMA; anchors.fill: parent; hoverEnabled: true; onClicked: root.selectedDay = cell.cellDate }
+                        DropArea {
+                            anchors.fill: parent
+                            onEntered: cell.color = root.cSurface2
+                            onExited: if (!cell.isSel) cell.color = "transparent"
+                            onDropped: function (drop) {
+                                if (!cell.isSel) cell.color = "transparent"
+                                if (drop.source && drop.source.dragEv) root.moveEventToDay(drop.source.dragEv, cell.cellDate)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ── week grid: 7 day-columns, each listing its events (plan a week of nights) ──
+            RowLayout {
+                visible: root.calMode === "week"
+                Layout.fillWidth: true; Layout.fillHeight: true
+                Layout.leftMargin: Theme.spacing.medium; Layout.rightMargin: Theme.spacing.medium
+                Layout.topMargin: 4; Layout.bottomMargin: Theme.spacing.medium; spacing: 4
+                Repeater {
+                    model: root.calMode === "week" ? root.weekDaysOf(root.selectedDay) : []
+                    Rectangle {
+                        Layout.fillWidth: true; Layout.fillHeight: true; radius: 10
+                        property bool isToday: root.sameDay(modelData, new Date())
+                        property bool isSel: root.sameDay(modelData, root.selectedDay)
+                        color: isSel ? root.cSurface : root.cMantle
+                        border.width: isSel ? 1 : 0; border.color: root.cBlue
+                        ColumnLayout {
+                            anchors.fill: parent; anchors.margins: 6; spacing: 4
+                            RowLayout {
+                                Layout.fillWidth: true; spacing: 4
+                                LogosText { textFormat: Text.PlainText; text: root.weekDays[index]; color: root.cSub; font.pixelSize: 10; font.weight: Theme.typography.weightMedium }
+                                Item { Layout.fillWidth: true }
+                                Rectangle {
+                                    width: 20; height: 20; radius: 10; color: isToday ? root.cYellow : "transparent"
+                                    LogosText { textFormat: Text.PlainText; anchors.centerIn: parent; text: modelData.getDate(); color: isToday ? root.cCrust : root.cText; font.pixelSize: 12; font.weight: isToday ? Theme.typography.weightMedium : Font.Normal }
+                                }
+                            }
+                            Rectangle { Layout.fillWidth: true; height: 1; color: root.cSurface2 }
+                            ListView {
+                                Layout.fillWidth: true; Layout.fillHeight: true; clip: true; spacing: 3
+                                model: root.eventsOnDay(modelData)
+                                delegate: Rectangle {
+                                    width: ListView.view.width; implicitHeight: 34; radius: 7
+                                    color: wkEvMA.containsMouse ? root.cSurface2 : root.cSurface
+                                    RowLayout {
+                                        anchors.fill: parent; anchors.leftMargin: 5; anchors.rightMargin: 5; spacing: 4
+                                        Rectangle { width: 3; height: 22; radius: 1.5; color: root.evColor(modelData); Layout.alignment: Qt.AlignVCenter }
+                                        ColumnLayout {
+                                            Layout.fillWidth: true; spacing: 0
+                                            LogosText { textFormat: Text.PlainText; text: root.clashMark(modelData) + root.rsvpMark(modelData) + (modelData.title || "(untitled)"); color: root.myRsvpOf(modelData) === "no" ? root.cSub : root.cText; font.strikeout: root.myRsvpOf(modelData) === "no"; font.pixelSize: 11; elide: Text.ElideRight; Layout.fillWidth: true }
+                                            LogosText { textFormat: Text.PlainText; text: root.fmtTime(modelData.startTime); color: root.cSub; font.pixelSize: 9; elide: Text.ElideRight; Layout.fillWidth: true }
                                         }
-                                        MouseArea {
-                                            anchors.fill: parent; z: -1; cursorShape: Qt.PointingHandCursor
-                                            // Double-click an empty spot: a new night on that day (and in that venue's column).
-                                            onDoubleClicked: root.openNew(new Date(dayRow.modelData.date), root.laneBy === "venue" && root.grid.lanes[cell.index] ? root.grid.lanes[cell.index].id : "")
+                                    }
+                                    MouseArea { id: wkEvMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.openEditEvent(modelData) }
+                                }
+                            }
+                            LogosText { textFormat: Text.PlainText;
+                                text: "+"; color: root.cFaint; font.pixelSize: 16; Layout.alignment: Qt.AlignHCenter
+                                MouseArea { anchors.fill: parent; anchors.margins: -6; cursorShape: Qt.PointingHandCursor
+                                    onClicked: { root.selectedDay = modelData; root.openNewEvent() } }
+                            }
+                        }
+                        MouseArea { anchors.fill: parent; z: -1; onClicked: root.selectedDay = modelData }
+                    }
+                }
+            }
+
+            // ── day timeline: all-day band + hour-bucketed schedule for the selected day ──
+            ColumnLayout {
+                visible: root.calMode === "day"
+                Layout.fillWidth: true; Layout.fillHeight: true
+                Layout.leftMargin: Theme.spacing.medium; Layout.rightMargin: Theme.spacing.medium
+                Layout.topMargin: 4; Layout.bottomMargin: Theme.spacing.medium; spacing: 6
+
+                Flow {
+                    Layout.fillWidth: true; spacing: 6
+                    visible: root.calMode === "day" && root.dayAllDay(root.selectedDay).length > 0
+                    Repeater {
+                        model: root.calMode === "day" ? root.dayAllDay(root.selectedDay) : []
+                        delegate: Rectangle {
+                            radius: 8; color: root.cSurface; border.width: 1; border.color: root.cSurface2
+                            implicitWidth: adRow.implicitWidth + 16; height: 30
+                            Row {
+                                id: adRow; anchors.verticalCenter: parent.verticalCenter; anchors.left: parent.left; anchors.leftMargin: 8; spacing: 6
+                                Rectangle { width: 3; height: 16; radius: 1.5; color: root.evColor(modelData); anchors.verticalCenter: parent.verticalCenter }
+                                LogosText { textFormat: Text.PlainText; text: root.clashMark(modelData) + root.rsvpMark(modelData) + (modelData.title || "(untitled)"); color: root.myRsvpOf(modelData) === "no" ? root.cSub : root.cText; font.strikeout: root.myRsvpOf(modelData) === "no"; font.pixelSize: 12; anchors.verticalCenter: parent.verticalCenter }
+                            }
+                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.openEditEvent(modelData) }
+                        }
+                    }
+                }
+
+                Flickable {
+                    Layout.fillWidth: true; Layout.fillHeight: true; clip: true
+                    contentHeight: hourCol.height; boundsBehavior: Flickable.StopAtBounds
+                    ScrollBar.vertical: ScrollBar {}
+                    Column {
+                        id: hourCol; width: parent.width; spacing: 0
+                        Repeater {
+                            model: root.calMode === "day" ? root.dayTimeline(root.selectedDay) : []
+                            delegate: Row {
+                                width: hourCol.width; spacing: 8
+                                property var rowItems: modelData.items
+                                property bool nowHour: root.sameDay(root.selectedDay, new Date()) && new Date().getHours() === modelData.hour
+                                LogosText { textFormat: Text.PlainText; width: 46; text: root.hh(modelData.hour); color: parent.nowHour ? root.cYellow : root.cSub; font.pixelSize: 11; topPadding: 8; font.weight: parent.nowHour ? Theme.typography.weightBold : Font.Normal }
+                                Column {
+                                    width: hourCol.width - 54; spacing: 6; topPadding: 6; bottomPadding: 6
+                                    Rectangle { width: parent.width; height: 1; color: root.cSurface2 }
+                                    Repeater {
+                                        model: rowItems
+                                        delegate: Rectangle {
+                                            width: parent.width; radius: 10; color: evMA2.containsMouse ? root.cSurface2 : root.cSurface
+                                            border.width: 1; border.color: root.cSurface2
+                                            implicitHeight: evCol2.implicitHeight + 16
+                                            Rectangle { anchors.left: parent.left; anchors.top: parent.top; anchors.bottom: parent.bottom; anchors.margins: 6; width: 3; radius: 1.5; color: root.evColor(modelData) }
+                                            Column {
+                                                id: evCol2
+                                                anchors.left: parent.left; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                                                anchors.leftMargin: 16; anchors.rightMargin: 10; spacing: 2
+                                                LogosText { textFormat: Text.PlainText; text: root.clashMark(modelData) + root.rsvpMark(modelData) + (modelData.title || "(untitled)"); color: root.myRsvpOf(modelData) === "no" ? root.cSub : root.cText; font.strikeout: root.myRsvpOf(modelData) === "no"; font.pixelSize: 14; font.weight: Theme.typography.weightMedium; elide: Text.ElideRight; width: parent.width }
+                                                LogosText { textFormat: Text.PlainText; text: root.fmtTime(modelData.startTime) + " – " + root.fmtTime(modelData.endTime) + (modelData.location ? " · " + modelData.location : ""); color: root.cSub; font.pixelSize: 12; elide: Text.ElideRight; width: parent.width }
+                                            }
+                                            MouseArea { id: evMA2; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.openEditEvent(modelData) }
                                         }
                                     }
                                 }
@@ -1122,556 +1080,2273 @@ Item {
                     }
                 }
             }
+            }
         }
 
-        // ── night panel ───────────────────────────────────────────────────────
+        // ── pane 3: agenda (resizable) ─────────────────────────────────────
         Rectangle {
-            visible: root.selMaster !== null
-            Layout.fillHeight: true; Layout.preferredWidth: 310; color: root.cMantle
-            Flickable {
-                id: panelFlick
-                anchors.fill: parent; anchors.margins: 14; clip: true
-                contentWidth: width; contentHeight: panelCol.implicitHeight
-                ScrollBar.vertical: ScrollBar {}
-                ColumnLayout {
-                    id: panelCol
-                    width: panelFlick.width; spacing: 8
-                    RowLayout {
-                        Layout.fillWidth: true
-                        LogosText { textFormat: Text.PlainText; text: root.selMaster ? (root.selMaster.title || "(untitled)") : ""; color: root.cText; font.pixelSize: 18; font.weight: Theme.typography.weightMedium; wrapMode: Text.Wrap; Layout.fillWidth: true }
-                        LogosText { textFormat: Text.PlainText; text: "✕"; color: root.cSub; font.pixelSize: 15
-                            MouseArea { anchors.fill: parent; anchors.margins: -6; cursorShape: Qt.PointingHandCursor; onClicked: root.selected = null } }
-                    }
-                    LogosText { textFormat: Text.PlainText; Layout.fillWidth: true; wrapMode: Text.Wrap; color: root.cSub; font.pixelSize: 13
-                        text: root.selected ? (Qt.formatDateTime(new Date(root.selected.startTime), "dddd d MMMM, hh:mm") + "–" + Qt.formatTime(new Date(root.selected.endTime), "hh:mm")
-                            + (root.selCal ? "  ·  " + (root.selCal.name || "") : "")) : "" }
-                    LogosText { textFormat: Text.PlainText; visible: !!root.selMaster && !root.canEdit(root.selMaster); Layout.fillWidth: true; wrapMode: Text.Wrap; color: root.cFaint; font.pixelSize: 12
-                        text: "Read-only: you can't edit this night on this calendar." }
+            SplitView.preferredWidth: 320
+            SplitView.minimumWidth: 220
+            color: root.cMantle
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: Theme.spacing.medium
+                spacing: Theme.spacing.small
 
-                    LogosText { textFormat: Text.PlainText; text: "Status"; color: root.cFaint; font.pixelSize: 11; Layout.topMargin: 6 }
-                    Flow {
-                        Layout.fillWidth: true; spacing: 6
-                        Repeater {
-                            model: root.statuses
-                            delegate: Chip {
-                                required property var modelData
-                                text: modelData; accent: root.statusColor(modelData)
-                                on: root.fieldOf(root.selMaster, "status") === modelData
-                                opacity: root.canEdit(root.selMaster) ? 1 : 0.5
-                                onClicked: if (root.canEdit(root.selMaster) && !on) root.setField("status", modelData)
-                            }
-                        }
-                    }
-                    LogosText { textFormat: Text.PlainText; text: "Venue"; color: root.cFaint; font.pixelSize: 11; Layout.topMargin: 6 }
+                // Search — matches title/location/notes/calendar/fields across ALL dates; when filled,
+                // the list below shows results (with each event's date) instead of the selected day.
+                Rectangle {
+                    Layout.fillWidth: true; implicitHeight: 34; radius: 9
+                    color: root.cBase; border.width: 1; border.color: searchField.activeFocus ? root.cBlue : root.cSurface2
                     RowLayout {
-                        Layout.fillWidth: true; spacing: 6
-                        Input {
-                            id: venueInput
-                            Layout.fillWidth: true; color: root.cText; font.pixelSize: 13
-                            enabled: root.canEdit(root.selMaster)
-                            text: root.fieldOf(root.selMaster, "venue")
-                            placeholderText: "Where it happens"
-                            onAccepted: root.setField("venue", text.trim())
+                        anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 6; spacing: 6
+                        LogosText { textFormat: Text.PlainText; text: "🔍"; font.pixelSize: 12; color: root.cSub }
+                        TextField {
+                            id: searchField
+                            Layout.fillWidth: true; placeholderText: "Search events…"
+                            color: root.cText; font.pixelSize: 13; background: Item {}
+                            onTextChanged: root.searchQuery = text
                         }
-                        Btn { text: "Save"; enabled_: root.canEdit(root.selMaster) && venueInput.text.trim() !== root.fieldOf(root.selMaster, "venue"); onClicked: root.setField("venue", venueInput.text.trim()) }
-                    }
-                    LogosText { textFormat: Text.PlainText; text: "Type"; color: root.cFaint; font.pixelSize: 11; Layout.topMargin: 6 }
-                    Flow {
-                        Layout.fillWidth: true; spacing: 6
-                        Repeater {
-                            model: root.types
-                            delegate: Chip {
-                                required property var modelData
-                                text: modelData; on: root.fieldOf(root.selMaster, "type") === modelData
-                                opacity: root.canEdit(root.selMaster) ? 1 : 0.5
-                                onClicked: if (root.canEdit(root.selMaster) && !on) root.setField("type", modelData)
-                            }
+                        LogosText { textFormat: Text.PlainText;
+                            visible: root.searchQuery.length > 0; text: "✕"; color: root.cSub; font.pixelSize: 13
+                            MouseArea { anchors.fill: parent; anchors.margins: -4; cursorShape: Qt.PointingHandCursor; onClicked: { searchField.text = ""; root.searchQuery = "" } }
                         }
                     }
-                    // Line-up: Freequencies ext items on the night (ADR 0004); artists from Kith.
-                    RowLayout {
-                        Layout.fillWidth: true; Layout.topMargin: 6
-                        LogosText { textFormat: Text.PlainText; Layout.fillWidth: true; text: "Line-up (" + root.lineupOf(root.selMaster).length + ")"; color: root.cFaint; font.pixelSize: 11 }
-                        LogosText { textFormat: Text.PlainText; text: "+ Artist"; color: root.cBlue; font.pixelSize: 12
-                            MouseArea { anchors.fill: parent; anchors.margins: -4; cursorShape: Qt.PointingHandCursor; onClicked: root.openArtist(null) } }
-                    }
-                    LogosText { textFormat: Text.PlainText; visible: root.lineupOf(root.selMaster).length === 0; text: "No artists yet."; color: root.cSub; font.pixelSize: 12 }
+                }
+                // Date range for search results (defaults to ±1 year until one is picked).
+                Flow {
+                    visible: root.searching
+                    Layout.fillWidth: true; spacing: 6
                     Repeater {
-                        model: root.lineupOf(root.selMaster)
+                        model: root.ranges
                         delegate: Rectangle {
-                            id: bk
                             required property var modelData
-                            Layout.fillWidth: true; Layout.preferredHeight: bkCol.implicitHeight + 12; radius: 6; color: root.cSurface
-                            Rectangle { x: 8; anchors.verticalCenter: parent.verticalCenter; width: 8; height: 8; radius: 4; color: root.bookingColor(bk.modelData.status) }
-                            Column {
-                                id: bkCol
-                                x: 24; anchors.verticalCenter: parent.verticalCenter; width: parent.width - 32; spacing: 1
-                                LogosText { textFormat: Text.PlainText; width: parent.width; elide: Text.ElideRight; color: bk.modelData.status === "cancelled" ? root.cSub : root.cText; font.pixelSize: 13
-                                    font.strikeout: bk.modelData.status === "cancelled"; text: root.kithName(bk.modelData) }
-                                LogosText { textFormat: Text.PlainText; width: parent.width; elide: Text.ElideRight; color: root.cSub; font.pixelSize: 11
-                                    text: [bk.modelData.set, root.cap(bk.modelData.status), root.feeLabel(bk.modelData), bk.modelData.contact ? "" : "not in Kith"].filter(function (x) { return !!x }).join(" · ") }
-                            }
-                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.openArtist(bk.modelData) }
+                            readonly property bool on: root.effectiveRange === modelData.id
+                            height: 26; radius: 13; width: Math.min(160, chipLblR.implicitWidth + 20)
+                            color: on ? root.cSurface : "transparent"; border.width: 1; border.color: on ? root.cBlue : root.cSurface2
+                            LogosText { id: chipLblR; textFormat: Text.PlainText; anchors.centerIn: parent; width: Math.min(implicitWidth, parent.width - 16); elide: Text.ElideRight
+                                text: modelData.label; color: parent.on ? root.cBlue : root.cSub; font.pixelSize: 12 }
+                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { root.rangeId = modelData.id; root.rangePicked = true } }
                         }
                     }
-                    LogosText { textFormat: Text.PlainText; visible: root.feesTotal(root.lineupOf(root.selMaster)) !== ""; text: "Fees: " + root.feesTotal(root.lineupOf(root.selMaster)); color: root.cSub; font.pixelSize: 12 }
-                    Repeater {
-                        model: root.selected ? (root.doubles[root.occKey(root.selected)] || []) : []
-                        delegate: LogosText { required property var modelData; textFormat: Text.PlainText; Layout.fillWidth: true; wrapMode: Text.Wrap; color: root.cYellow; font.pixelSize: 12; text: root.doubleLine(modelData) }
-                    }
-                    // Public: a copy in a public calendar, kept in step (ADR 0008).
-                    LogosText { textFormat: Text.PlainText; Layout.topMargin: 6; text: "Public"; color: root.cFaint; font.pixelSize: 11 }
-                    Rectangle {
-                        id: pubBox
-                        readonly property var link: root.publicLinkOf(root.selMaster)
-                        readonly property var pcal: link ? root.calById(link.calendar) : null
-                        Layout.fillWidth: true; Layout.preferredHeight: pubCol.implicitHeight + 14; radius: 6; color: root.cSurface
-                        ColumnLayout {
-                            id: pubCol
-                            x: 10; width: parent.width - 20; anchors.verticalCenter: parent.verticalCenter; spacing: 3
-                            LogosText { textFormat: Text.PlainText; Layout.fillWidth: true; wrapMode: Text.Wrap; color: root.cText; font.pixelSize: 13
-                                text: !pubBox.link ? "Only this calendar's members see this night." : pubBox.pcal ? "Public in “" + pubBox.pcal.name + "”" : "Public in a calendar not on this computer" }
-                            LogosText { textFormat: Text.PlainText; Layout.fillWidth: true; wrapMode: Text.Wrap; color: root.cSub; font.pixelSize: 11
-                                visible: !!pubBox.link
-                                text: root.putMissing ? "The public copy can't be updated from here: update the ‘scala’ package to 0.12.4 or newer."
-                                    : root.mirrorBlocked[root.selMaster ? root.selMaster.id : ""] ? "You can't update the public copy: ask an editor of the public calendar to open Freequencies."
-                                    : "Attendees see the time, venue, confirmed artists and the guest-list link. Nothing else." }
-                            Flow {
-                                Layout.fillWidth: true; spacing: 14
-                                LogosText { visible: !pubBox.link; text: "Make public"; color: root.cBlue; font.pixelSize: 12
-                                    MouseArea { anchors.fill: parent; anchors.margins: -4; cursorShape: Qt.PointingHandCursor; onClicked: pubPopup.open() } }
-                                LogosText { visible: !!pubBox.pcal && root.isEditorOf(pubBox.pcal); text: "Copy link for attendees"; color: root.cBlue; font.pixelSize: 12
-                                    MouseArea { anchors.fill: parent; anchors.margins: -4; cursorShape: Qt.PointingHandCursor; onClicked: root.copyInvite(pubBox.pcal.id, "viewer") } }
-                                LogosText { visible: !!pubBox.pcal && root.isEditorOf(pubBox.pcal); text: "Invite an organiser"; color: root.cBlue; font.pixelSize: 12
-                                    MouseArea { anchors.fill: parent; anchors.margins: -4; cursorShape: Qt.PointingHandCursor; onClicked: root.copyInvite(pubBox.pcal.id, "editor") } }
-                                LogosText { visible: !!pubBox.link && (!!root.selCal && pubBox.link.author === root.selCal.authorAddr || root.isEditorOf(root.selCal)); text: "Stop"; color: root.cRed; font.pixelSize: 12
-                                    MouseArea { anchors.fill: parent; anchors.margins: -4; cursorShape: Qt.PointingHandCursor; onClicked: root.stopPublic() } }
-                            }
-                        }
-                    }
-                    // Crew: roles, call times and check-in (ADR 0007).
-                    RowLayout {
-                        Layout.fillWidth: true; Layout.topMargin: 6
-                        LogosText { textFormat: Text.PlainText; Layout.fillWidth: true; color: root.cFaint; font.pixelSize: 11
-                            text: "Crew" + (root.crewSummaryLabel(root.crewSummary(root.crewOf(root.selMaster))) ? " (" + root.crewSummaryLabel(root.crewSummary(root.crewOf(root.selMaster))) + ")" : "") }
-                        LogosText { textFormat: Text.PlainText; text: "+ Crew"; color: root.cBlue; font.pixelSize: 12
-                            MouseArea { anchors.fill: parent; anchors.margins: -4; cursorShape: Qt.PointingHandCursor; onClicked: root.openCrew(null) } }
-                    }
-                    LogosText { textFormat: Text.PlainText; visible: root.crewOf(root.selMaster).length === 0; Layout.fillWidth: true; wrapMode: Text.Wrap; color: root.cSub; font.pixelSize: 12
-                        text: "No crew yet. Add people, or a role with no name as an open slot." }
-                    Repeater {
-                        model: root.crewOf(root.selMaster)
+                }
+                LogosText { textFormat: Text.PlainText;
+                    text: root.searching ? (root.searchResults.length + " result" + (root.searchResults.length === 1 ? "" : "s")) : Qt.formatDate(root.selectedDay, "dddd")
+                    color: root.cText; font.pixelSize: 18; font.weight: Theme.typography.weightMedium
+                }
+                LogosText { textFormat: Text.PlainText;
+                    text: root.searching ? ("for “" + root.searchQuery.trim() + "”") : Qt.formatDate(root.selectedDay, "MMMM d, yyyy")
+                    color: root.cSub; font.pixelSize: 13; elide: Text.ElideRight; Layout.fillWidth: true
+                }
+                Rectangle { Layout.fillWidth: true; height: 1; color: root.cSurface2 }
+
+                Item {
+                    Layout.fillWidth: true; Layout.fillHeight: true
+                    ListView {
+                        id: dayList
+                        anchors.fill: parent; clip: true
+                        model: root.searching ? root.searchResults : root.eventsOnDay(root.selectedDay)
+                        spacing: Theme.spacing.small
                         delegate: Rectangle {
-                            id: cr
-                            required property var modelData
-                            readonly property bool canToggle: !!modelData.name && modelData.status !== "cancelled" && (!modelData.checkedIn || root.canUndoCheckin(modelData))
-                            Layout.fillWidth: true; Layout.preferredHeight: crCol.implicitHeight + 12; radius: 6; color: root.cSurface
-                            Rectangle { x: 8; anchors.verticalCenter: parent.verticalCenter; width: 8; height: 8; radius: 4; color: cr.modelData.name ? root.bookingColor(cr.modelData.status) : root.cFaint }
-                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.openCrew(cr.modelData) }
-                            Column {
-                                id: crCol
-                                x: 24; anchors.verticalCenter: parent.verticalCenter; width: parent.width - 32 - (here.visible ? here.width + 8 : 0); spacing: 1
-                                LogosText { textFormat: Text.PlainText; width: parent.width; elide: Text.ElideRight; font.pixelSize: 13
-                                    color: cr.modelData.status === "cancelled" || !cr.modelData.name ? root.cSub : root.cText
-                                    font.strikeout: cr.modelData.status === "cancelled"; font.italic: !cr.modelData.name
-                                    text: (cr.modelData.role ? cr.modelData.role + ": " : "") + (cr.modelData.name ? root.kithName(cr.modelData) : "open") }
-                                LogosText { textFormat: Text.PlainText; width: parent.width; elide: Text.ElideRight; color: root.cSub; font.pixelSize: 11
-                                    visible: text !== ""
-                                    text: [cr.modelData.call ? "from " + cr.modelData.call : "", cr.modelData.name ? root.cap(cr.modelData.status) : "",
-                                           cr.modelData.checkedIn ? "here " + Qt.formatTime(new Date(cr.modelData.checkedIn.at), "hh:mm") : ""].filter(function (x) { return !!x }).join(" · ") }
+                            width: dayList.width; implicitHeight: Math.max(62, cardCol.implicitHeight + 2 * Theme.spacing.small); radius: 12
+                            color: evMA.containsMouse ? root.cSurface2 : root.cSurface
+                            RowLayout {
+                                anchors.fill: parent; anchors.margins: Theme.spacing.small; spacing: Theme.spacing.small
+                                Rectangle { width: 4; height: 42; radius: 2; color: root.evColor(modelData); Layout.alignment: Qt.AlignTop; Layout.topMargin: 2 }
+                                ColumnLayout {
+                                    id: cardCol
+                                    Layout.fillWidth: true; spacing: 2
+                                    LogosText { textFormat: Text.PlainText; text: root.clashMark(modelData) + root.rsvpMark(modelData) + (modelData.title || "(untitled)"); color: root.myRsvpOf(modelData) === "no" ? root.cSub : root.cText; font.strikeout: root.myRsvpOf(modelData) === "no"; font.pixelSize: 14; font.weight: Theme.typography.weightMedium; elide: Text.ElideRight; Layout.fillWidth: true }
+                                    LogosText { textFormat: Text.PlainText;
+                                        text: (root.searching ? Qt.formatDate(new Date(modelData.startTime), "ddd MMM d") + " · " : "") + root.fmtTime(modelData.startTime) + " – " + root.fmtTime(modelData.endTime)
+                                        color: root.cSub; font.pixelSize: 12; elide: Text.ElideRight; Layout.fillWidth: true
+                                    }
+                                    LogosText { textFormat: Text.PlainText;
+                                        text: root.calName(modelData.calendarId); visible: text.length > 0
+                                        color: root.calColor(modelData.calendarId); font.pixelSize: 11; elide: Text.ElideRight; Layout.fillWidth: true
+                                    }
+                                    Flow {
+                                        visible: root.fieldValues(modelData).length > 0
+                                        Layout.fillWidth: true; Layout.topMargin: 1; spacing: 4
+                                        Repeater {
+                                            model: root.fieldValues(modelData)
+                                            Rectangle {
+                                                width: badgeT.implicitWidth + 12; height: 16; radius: 5; color: root.cSurface2
+                                                LogosText { textFormat: Text.PlainText; id: badgeT; anchors.centerIn: parent; text: modelData; color: root.cText; font.pixelSize: 10 }
+                                            }
+                                        }
+                                    }
+                                }
                             }
-                            Chip {
-                                id: here
-                                visible: !!cr.modelData.name && cr.modelData.status !== "cancelled" || !!cr.modelData.checkedIn
-                                anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter
-                                text: cr.modelData.checkedIn ? "Here ✓" : "Check in"
-                                on: !!cr.modelData.checkedIn; accent: root.cGreen
-                                opacity: cr.canToggle && !root.crewBusy ? 1 : 0.6
-                                onClicked: if (cr.canToggle) root.toggleCheckin(cr.modelData)
-                            }
-                        }
-                    }
-                    // Forms: WhisperBox forms attached to this night (ADR 0005).
-                    RowLayout {
-                        Layout.fillWidth: true; Layout.topMargin: 6
-                        LogosText { textFormat: Text.PlainText; Layout.fillWidth: true; text: "Forms (" + root.formsOf(root.selMaster).length + ")"; color: root.cFaint; font.pixelSize: 11 }
-                        LogosText { textFormat: Text.PlainText; text: "+ Form"; color: root.cBlue; font.pixelSize: 12
-                            MouseArea { anchors.fill: parent; anchors.margins: -4; cursorShape: Qt.PointingHandCursor; onClicked: formPopup.open() } }
-                    }
-                    LogosText { textFormat: Text.PlainText; visible: root.formsOf(root.selMaster).length === 0; Layout.fillWidth: true; wrapMode: Text.Wrap; color: root.cSub; font.pixelSize: 12
-                        text: "No forms yet. Add one for artist bookings, crew, the guest list or feedback." }
-                    Repeater {
-                        model: root.formsOf(root.selMaster)
-                        delegate: Rectangle {
-                            id: fm
-                            required property var modelData
-                            readonly property var w: root.wbForms[modelData.formId]
-                            readonly property bool mine: !!root.wbSummaries[modelData.formId] && root.wbSummaries[modelData.formId].canRead === true
-                            Layout.fillWidth: true; Layout.preferredHeight: fmCol.implicitHeight + 14; radius: 6; color: root.cSurface
-                            ColumnLayout {
-                                id: fmCol
-                                x: 10; y: 7; width: parent.width - 20; spacing: 3
-                                LogosText { textFormat: Text.PlainText; Layout.fillWidth: true; elide: Text.ElideRight; color: root.cText; font.pixelSize: 13; text: root.formTitle(fm.modelData) }
-                                LogosText { textFormat: Text.PlainText; Layout.fillWidth: true; elide: Text.ElideRight; color: root.cSub; font.pixelSize: 11; text: root.formLine(fm.modelData) }
-                                Row {
-                                    spacing: 14
-                                    LogosText { textFormat: Text.PlainText; visible: fm.modelData.uri !== ""; text: "Copy link"; color: root.cBlue; font.pixelSize: 12
-                                        MouseArea { anchors.fill: parent; anchors.margins: -4; cursorShape: Qt.PointingHandCursor; onClicked: root.copyText(fm.modelData.uri) } }
-                                    LogosText { textFormat: Text.PlainText; visible: fm.mine; text: "Answers"; color: root.cBlue; font.pixelSize: 12
-                                        MouseArea { anchors.fill: parent; anchors.margins: -4; cursorShape: Qt.PointingHandCursor; onClicked: root.openResponses(fm.modelData) } }
-                                    LogosText { textFormat: Text.PlainText; visible: (!!root.selCal && fm.modelData.author === root.selCal.authorAddr) || root.isEditorOf(root.selCal); text: "Remove"; color: root.cRed; font.pixelSize: 12
-                                        MouseArea { anchors.fill: parent; anchors.margins: -4; cursorShape: Qt.PointingHandCursor; onClicked: root.detachForm(fm.modelData) } }
+                            MouseArea {
+                                id: evMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                                property bool dragging: false; property real px: 0; property real py: 0
+                                onPressed: function (m) { px = m.x; py = m.y; dragging = false }
+                                onPositionChanged: function (m) {
+                                    if (!pressed) return
+                                    if (!dragging && (Math.abs(m.x - px) + Math.abs(m.y - py)) < 8) return
+                                    if (!dragging) { dragging = true; dragProxy.dragEv = modelData; dragProxy.visible = true }
+                                    var gp = mapToItem(root, m.x, m.y)
+                                    dragProxy.x = gp.x - dragProxy.width / 2; dragProxy.y = gp.y - dragProxy.height / 2
+                                }
+                                onReleased: function (m) {
+                                    if (dragging) { dragProxy.Drag.drop(); dragProxy.visible = false; dragProxy.dragEv = null; dragging = false }
+                                    else root.openEditEvent(modelData)
                                 }
                             }
                         }
                     }
-                    LogosText { textFormat: Text.PlainText; visible: !!root.selMaster && !!root.selMaster.description; text: "Notes"; color: root.cFaint; font.pixelSize: 11; Layout.topMargin: 6 }
-                    LogosText { textFormat: Text.PlainText; visible: !!root.selMaster && !!root.selMaster.description; text: root.selMaster ? (root.selMaster.description || "") : ""; color: root.cText; font.pixelSize: 13; wrapMode: Text.Wrap; Layout.fillWidth: true }
-                    LogosText { textFormat: Text.PlainText; text: "Attendance: " + root.rsvpSummary(root.selMaster); color: root.cSub; font.pixelSize: 12; Layout.topMargin: 6 }
-
-                    // Comments: Scala's ext items, so the same thread shows in Scala.
-                    LogosText { textFormat: Text.PlainText; text: "Comments (" + root.commentsOf(root.selMaster).length + ")"; color: root.cFaint; font.pixelSize: 11; Layout.topMargin: 10 }
-                    Repeater {
-                        model: root.commentsOf(root.selMaster)
-                        delegate: ColumnLayout {
-                            required property var modelData
-                            readonly property bool mine: !!root.selCal && modelData.author === root.selCal.authorAddr
-                            Layout.fillWidth: true; spacing: 2
-                            RowLayout {
-                                Layout.fillWidth: true
-                                LogosText { textFormat: Text.PlainText; Layout.fillWidth: true; elide: Text.ElideRight; color: root.cSub; font.pixelSize: 11
-                                    text: (parent.parent.mine ? "You" : String(parent.parent.modelData.author).substring(0, 8) + "…") + " · " + Qt.formatDateTime(new Date(parent.parent.modelData.hlc.wall), "d MMM hh:mm") }
-                                LogosText { textFormat: Text.PlainText; visible: parent.parent.mine || root.isEditorOf(root.selCal); text: "Delete"; color: root.cRed; font.pixelSize: 11
-                                    MouseArea { anchors.fill: parent; anchors.margins: -4; cursorShape: Qt.PointingHandCursor; onClicked: root.deleteComment(parent.parent.parent.modelData.id) } }
-                            }
-                            LogosText { textFormat: Text.PlainText; Layout.fillWidth: true; wrapMode: Text.Wrap; color: root.cText; font.pixelSize: 13
-                                text: (parent.modelData.data && typeof parent.modelData.data.text === "string") ? parent.modelData.data.text : "(empty)" }
-                        }
-                    }
-                    RowLayout {
-                        Layout.fillWidth: true; spacing: 6
-                        Input { id: commentInput; Layout.fillWidth: true; placeholderText: "Add a comment…"; color: root.cText; font.pixelSize: 13; onAccepted: root.postComment(text) }
-                        Btn { text: root.commentBusy ? "Posting…" : "Post"; enabled_: commentInput.text.trim() !== "" && !root.commentBusy; onClicked: root.postComment(commentInput.text) }
+                    LogosText { textFormat: Text.PlainText;
+                        anchors.centerIn: parent; width: parent.width - 20
+                        visible: dayList.count === 0
+                        text: root.searching ? "No events match your search." : "No events on this day.\nClick “+ Event” to add one."
+                        horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap
+                        color: root.cFaint; font.pixelSize: 13
                     }
                 }
             }
         }
     }
 
-    // ── new night ────────────────────────────────────────────────────────────────
-    property string newCalId: ""
-    property string newStatus: "Hold"
-    function pad(n) { return (n < 10 ? "0" : "") + n }
-    function openNew(day, venue) {
-        if (freqCals.length === 0) return
-        var d = day ? new Date(day) : new Date(firstDay)
-        newCalId = newCalId && calById(newCalId) && isFreqCal(calById(newCalId)) ? newCalId : freqCals[0].id
-        newStatus = "Hold"
-        nTitle.text = ""; nVenue.text = venue && venue !== "—" ? venue : ""
-        nDate.text = d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate())
-        nStart.text = "22:00"; nEnd.text = "04:00"
-        newPopup.open()
-        nTitle.forceActiveFocus()
+    // ── event editor popup ─────────────────────────────────────────────────
+    property var editingEvent: null       // null = creating
+    property var editingOcc: null         // the occurrence that was opened (for clash warnings)
+    property string editCalId: ""
+    property string lastCalId: ""           // remember last calendar an event was created in → preselect it
+    property var evCals: []                 // cached writable-calendar list for the event modal's picker (stable → currentIndex resolves)
+    // Two-rule permissions (mirror the fold): owner/editors do anything; viewers read-only;
+    // everyone else may ADD iff Open, and edit/delete only the events they authored.
+    // Permission checks must use the LOAM identity that actually authors on THIS calendar (its bound
+    // identity), not scala's core getIdentity — events are signed via loam_core now (loam ADR 0004).
+    // calAddr[calId] = that address; falls back to the default identity's address.
+    property var calAddr: ({})
+    function defaultAddr() { for (var i = 0; i < identities.length; i++) if (identities[i].id === defaultIdentityId) return identities[i].address; return "" }
+    function addrFor(c) {
+        if (c && c.binding) return root.calAddr[c.id] || ""   // Loam HD identity: its own address (empty until resolved)
+        return (c && root.calAddr[c.id]) ? root.calAddr[c.id] : defaultAddr()
     }
-    function parseLocal(dateStr, timeStr) {
-        var dm = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dateStr).trim()), tm = /^(\d{1,2}):(\d{2})$/.exec(String(timeStr).trim())
-        if (!dm || !tm) return null
-        return new Date(+dm[1], +dm[2] - 1, +dm[3], +tm[1], +tm[2], 0, 0)
+    function isEditorMe(c) { if (!c) return true; var a = addrFor(c); if (c.owner === a) return true; var r = c.roles || {}; return r[a] === "editor" || r[a] === "admin" }
+    function isViewerMe(c) { if (!c) return false; return (c.roles || {})[addrFor(c)] === "viewer" }
+    function canAddTo(c) { if (isEditorMe(c)) return true; if (isViewerMe(c)) return false; return !c || c.open !== false }
+    function canEditEvent(c, ev) { if (isEditorMe(c)) return true; if (isViewerMe(c)) return false; if (c && c.collab) return true; return !!ev && ev.creatorId === addrFor(c) }
+    // Access tier (ADR 0019) — the three valid {open,collab} combos, presented as one choice so the
+    // off-ladder "collaborative + closed" state can't be created. Closed→Open→Collaborative is a ladder.
+    function calTierOf(c) { if (c && c.collab) return "collaborative"; if (!c || c.open !== false) return "open"; return "closed" }
+    function calTierMeta(tier) {
+        if (tier === "collaborative") return { open: true, collab: true }
+        if (tier === "open") return { open: true, collab: false }
+        return { open: false, collab: false } // closed
     }
-    property bool creating: false
-    function createNight() {
-        if (creating) return
-        var title = nTitle.text.trim()
-        var s = parseLocal(nDate.text, nStart.text), e = parseLocal(nDate.text, nEnd.text)
-        if (!title) { notify("Give the night a name.", true); return }
-        if (!s || !e) { notify("Use a date like 2026-10-24 and times like 22:00.", true); return }
-        if (e.getTime() <= s.getTime()) e = new Date(e.getTime() + 864e5)   // ends after midnight
-        var ev = { title: title, startTime: s.getTime(), endTime: e.getTime(), reminderMin: 60,
-                   fields: { status: newStatus, venue: nVenue.text.trim(), type: "Club night" } }
-        creating = true
-        core("createEvent", [newCalId, JSON.stringify(ev)], function (r) {
-            creating = false
-            var id = String(j(r, "") || "")
-            if (id) { newPopup.close(); notify("Added “" + title + "”"); refresh() }
-            else notify("Couldn't add the night. You may not be allowed to add events to this calendar.", true)
+    readonly property var accessTiers: [
+        { tier: "closed",        title: "Closed",        desc: "Only editors add events; everyone edits only their own." },
+        { tier: "open",          title: "Open",          desc: "Anyone you invite can add events; everyone edits only their own." },
+        { tier: "collaborative", title: "Collaborative", desc: "Anyone you invite can add — and edit or delete ANY event." }
+    ]
+    // Event editor read-only: a NEW event needs add rights; an EXISTING event needs edit
+    // rights on THAT event (yours, or you're an editor). Reactive to editCalId/editingEvent.
+    readonly property bool eventReadOnly: editingEvent ? !canEditEvent(calById(editCalId), editingEvent) : !canAddTo(calById(editCalId))
+    // Human "why can't I edit this" (ADR 0013). Desktop is single-identity, so the signing address
+    // is myIdentity; when desktop gains per-calendar identities, resolve the bound one here.
+    function readonlyReason(c, ev) {
+        if (!c) return ""
+        var a = root.addrFor(c)
+        if (isViewerMe(c)) return "You're a viewer on \"" + c.name + "\" — read-only."
+        if (ev && ev.creatorId && !isEditorMe(c) && ev.creatorId !== a)
+            return "Only the author can edit this event (created by " + shortAuthor(ev.creatorId) + "). You're signing as " + shortAuthor(a) + "."
+        if (c.owner && a !== c.owner && !isEditorMe(c))
+            return "This calendar is owned by " + shortAuthor(c.owner) + ", but you're signing as " + shortAuthor(a) + ". Make a new calendar, or bind an identity that owns or can edit it."
+        if (c.open === false && !isEditorMe(c))
+            return "\"" + c.name + "\" is closed — only its owner/editors can add events. You're signing as " + shortAuthor(a) + "."
+        return "You can't write to \"" + c.name + "\" as " + shortAuthor(a) + "."
+    }
+    // Inline validation — empty string == valid. Bound to the Save button + an error line.
+    function eventError() {
+        if (evTitle.text.trim() === "") return "Title is required."
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(evDate.text.trim())) return "Date must be YYYY-MM-DD."
+        if (!root.evAllDay) {
+            if (!/^\d{1,2}:\d{2}$/.test(evStart.text.trim())) return "Start time must be HH:MM."
+            if (!/^\d{1,2}:\d{2}$/.test(evEnd.text.trim())) return "End time must be HH:MM."
+        }
+        return ""
+    }
+    property var evHistory: []             // getEventHistory result while editing
+    property string evMyRsvp: ""           // ADR 0021: my optimistic attendance on the event being edited
+
+    // ── richer-editor state (null-safe: absent on old events) ──
+    property bool evAllDay: false
+    property int evReminder: 10           // minutes before; 0 = none
+    property string evRecurFreq: ""       // "" = does not repeat | daily/weekly/monthly/yearly
+    readonly property var reminderOpts: [{ l: "None", v: 0 }, { l: "10 min", v: 10 }, { l: "30 min", v: 30 }, { l: "1 hour", v: 60 }, { l: "1 day", v: 1440 }]
+    // ── attachments (ADR 0017 — stored in Logos Storage, sealed with the calendar key) ──
+    property var evAttachments: []          // refs on the current event draft: {name,mime,size,storageCid,blobId}
+    property bool attachBusy: false
+    property string attachMsg: ""
+    property string attachPollRef: ""       // ref currently being polled (upload blobId / download cid)
+    property string attachPollMode: ""      // "upload" | "download"
+    property string attachDiag: ""          // core's view of a pending transfer (shown under the message)
+    property real attachProgress: -1        // 0..1 of a download in flight; -1 = unknown yet
+    function humanSize(n) { n = n || 0; if (n < 1024) return n + " B"; if (n < 1048576) return (n / 1024).toFixed(1) + " KB"; return (n / 1048576).toFixed(1) + " MB" }
+    function removeAttachment(i) { var a = root.evAttachments.slice(); a.splice(i, 1); root.evAttachments = a }
+    function onAttachmentPicked(fileUrl) {
+        var path = ("" + fileUrl).replace(/^file:\/\//, "")
+        var name = path.split("/").pop()
+        root.attachBusy = true; root.attachDiag = ""; root.attachMsg = "Sealing + uploading " + name + "…"
+        // Basecamp returns string results JSON-quoted; unquote like coreVersion does, or the poll
+        // asks about "\"<ref>\"" and never sees the transfer finish.
+        root.coreAsync("uploadAttachment", [root.editCalId, path, name, ""], function (r) {
+            var ref = root.unq(r)
+            if (!ref) { root.attachBusy = false; root.attachMsg = "Upload failed to start"; return }
+            root.attachPollRef = ref; root.attachPollMode = "upload"; attachPoll.restart()
         })
     }
+    function openAttachment(calId, cid, name) {
+        if (!cid) { root.attachMsg = "Not uploaded yet"; return }
+        root.attachBusy = true; root.attachDiag = ""; root.attachMsg = "Fetching " + (name || cid) + "…"
+        root.coreAsync("downloadAttachment", [calId, cid, name || ""], function (r) {
+            var ref = root.unq(r)
+            if (!ref) { root.attachBusy = false; root.attachMsg = "Download failed to start"; return }
+            root.attachPollRef = ref; root.attachPollMode = "download"; attachPoll.restart()
+        })
+    }
+    property bool attachPollBusy: false
+    function pollAttach() {
+        if (root.attachPollBusy || !root.attachPollRef) return
+        root.attachPollBusy = true
+        var ref = root.attachPollRef
+        root.coreAsync("attachmentStatus", [ref], function (raw) {
+            root.attachPollBusy = false
+            if (ref !== root.attachPollRef) return       // a newer transfer replaced this one
+            root.applyAttachStatus(root.j(raw, {}))
+        })
+    }
+    function applyAttachStatus(r) {
+        if (r.pending) {                           // still working — keep polling
+            if (r.note) root.attachDiag = r.note     // what the core sees (helps diagnose a hang)
+            root.attachProgress = (r.total > 0) ? Math.min(0.99, (r.done || 0) / r.total) : -1
+            return
+        }
+        root.attachDiag = ""; root.attachProgress = -1
+        attachPoll.stop(); root.attachBusy = false
+        if (!r.ok) { root.attachMsg = "Failed: " + (r.error || "unknown"); return }
+        if (root.attachPollMode === "upload") {
+            var a = root.evAttachments.slice()
+            a.push({ name: r.name, mime: r.mime, size: r.size, storageCid: r.cid, blobId: r.blobId })
+            root.evAttachments = a; root.attachMsg = "Attached " + r.name
+        } else {
+            root.attachMsg = "Saved to " + r.path
+            Qt.openUrlExternally("file://" + r.path)
+        }
+    }
+    readonly property var recurOpts: [{ l: "Does not repeat", v: "" }, { l: "Daily", v: "daily" }, { l: "Weekly", v: "weekly" }, { l: "Monthly", v: "monthly" }, { l: "Yearly", v: "yearly" }]
+    // Build the recur object from the current editor controls (null when "Does not repeat").
+    function buildRecur() {
+        if (!root.evRecurFreq) return null
+        var n = Math.max(1, Math.floor(parseInt(evRecurInterval.text) || 1))
+        var o = { freq: root.evRecurFreq, interval: n }
+        var u = evRecurUntil.text.trim()
+        if (u !== "") { var t = Date.parse(u); if (!isNaN(t)) o.until = t }
+        return o
+    }
+    // True when the event being edited is (part of) a recurring series.
+    function editingRecurring() {
+        return root.editingEvent && root.editingEvent.recur && root.editingEvent.recur.freq
+    }
+
+    // Populate evFieldsModel (declared in the event popup) from the calendar's schema,
+    // seeding each row from the event's stored `fields`. Clearing+refilling recreates
+    // the Repeater delegates, so every open gets fresh reactive bindings.
+    function seedFieldVals(calId, ev) {
+        evFieldsModel.clear()
+        var sch = schemaFor(calId)
+        var src = (ev && ev.fields) ? ev.fields : {}
+        for (var i = 0; i < sch.length; i++) {
+            var f = sch[i], k = f.key
+            var has = (src[k] !== undefined && src[k] !== null)
+            evFieldsModel.append({
+                key: k,
+                label: f.label || k,
+                ftype: f.type || "text",
+                opts: JSON.stringify(f.options || []),
+                sval: (has && f.type !== "bool") ? String(src[k]) : "",
+                bval: (f.type === "bool") ? (has ? !!src[k] : false) : false
+            })
+        }
+    }
+    // Collect custom-field values into a typed object (only meaningful when schema non-empty).
+    function collectFieldVals(calId) {
+        var sch = schemaFor(calId)
+        var byKey = {}
+        for (var j = 0; j < evFieldsModel.count; j++) {
+            var it = evFieldsModel.get(j)
+            byKey[it.key] = { sval: it.sval, bval: it.bval }
+        }
+        var out = {}
+        for (var i = 0; i < sch.length; i++) {
+            var f = sch[i], row = byKey[f.key] || { sval: "", bval: false }
+            if (f.type === "number") out[f.key] = (row.sval === "") ? 0 : parseFloat(row.sval)
+            else if (f.type === "bool") out[f.key] = !!row.bval
+            else out[f.key] = String(row.sval || "")
+        }
+        return out
+    }
+    function openNewEvent() {
+        var w = writableCalendars()
+        if (w.length === 0) { newCalPopup.open(); return }
+        editingEvent = null; editingOcc = null
+        root.evCals = w
+        // Preselect the calendar you last added an event to (if still writable), else the first.
+        var pre = w[0].id
+        if (root.lastCalId !== "") { for (var k = 0; k < w.length; k++) if (w[k].id === root.lastCalId) { pre = root.lastCalId; break } }
+        editCalId = pre
+        evHistory = []
+        var start = new Date(selectedDay); start.setHours(9, 0, 0, 0)
+        var end = new Date(selectedDay); end.setHours(10, 0, 0, 0)
+        evTitle.text = ""; evDate.text = fmtDateInput(start)
+        evStart.text = fmtTimeInput(start); evEnd.text = fmtTimeInput(end); evNotes.text = ""
+        evAllDay = false; evReminder = 10; evRecurFreq = ""
+        evLocation.text = ""; evUrl.text = ""; evRecurInterval.text = "1"; evRecurUntil.text = ""
+        seedFieldVals(editCalId, null)
+        root.evAttachments = []; root.attachBusy = false; root.attachMsg = ""
+        eventPopup.open()
+    }
+    // `occ` may be an expanded occurrence — series edits operate on the MASTER, so
+    // load the real event (with its recurrence rule + true start date) by seriesId.
+    function openEditEvent(occ) {
+        var ev = occ
+        root.evCals = writableCalendars()
+        if (occ && occ.seriesId) { var m = root.eventById(occ.seriesId); if (m) ev = m }
+        editingEvent = ev
+        editingOcc = (occ && occ.seriesId !== undefined) ? occ : null
+        editCalId = ev.calendarId
+        var s = new Date(ev.startTime), e = new Date(ev.endTime)
+        evTitle.text = ev.title || ""; evDate.text = fmtDateInput(s)
+        evStart.text = fmtTimeInput(s); evEnd.text = fmtTimeInput(e); evNotes.text = ev.description || ""
+        evAllDay = !!ev.allDay
+        evReminder = (ev.reminderMin !== undefined && ev.reminderMin !== null) ? ev.reminderMin : 10
+        evLocation.text = ev.location || ""
+        evUrl.text = ev.url || ""
+        var r = ev.recur
+        evRecurFreq = (r && r.freq) ? r.freq : ""
+        evRecurInterval.text = (r && r.interval) ? String(r.interval) : "1"
+        evRecurUntil.text = (r && typeof r.until === "number") ? fmtDateInput(new Date(r.until)) : ""
+        seedFieldVals(ev.calendarId, ev)
+        root.evAttachments = (ev.attachments && ev.attachments.length) ? ev.attachments.slice() : []
+        root.attachBusy = false; root.attachMsg = ""
+        root.evMyRsvp = (ev.rsvps && ev.rsvps[root.addrFor(root.calById(ev.calendarId))]) || ""
+        root.evHistory = []
+        var histId = ev.id
+        root.coreAsync("getEventHistory", [ev.calendarId, ev.id], function (r) {
+            if (root.editingEvent && root.editingEvent.id === histId) root.evHistory = root.j(r, [])
+        })
+        eventPopup.open()
+    }
+    // ADR 0021: set my attendance (self-scoped); optimistic + refresh. "" retracts.
+    function setRsvp(status) {
+        if (!root.editingEvent) return
+        var next = (root.evMyRsvp === status) ? "" : status
+        root.evMyRsvp = next
+        root.coreAsync("setRsvp", [root.editCalId, root.editingEvent.id, next], function () { root.refresh() })
+    }
+    // ── comments (ADR 0024): Scala `ext` items, ns "scala", kind "comment", data { text } ──
+    // Read from the LIVE folded event (root.events updates on poll), so a peer's comment shows up.
+    function commentsOf(ev) {
+        var live = ev ? (root.eventById(ev.id) || ev) : null
+        var out = [], xs = (live && live.ext) || []
+        for (var i = 0; i < xs.length; i++) if (xs[i].ns === "scala" && xs[i].kind === "comment") out.push(xs[i])
+        return out
+    }
+    property bool commentBusy: false
+    function postComment(text) {
+        text = String(text || "").trim()
+        if (!text || root.commentBusy || !root.editingEvent) return
+        root.commentBusy = true
+        var item = { ns: "scala", kind: "comment", target: root.editingEvent.id, data: { text: text } }
+        root.coreAsync("postExt", [root.editCalId, JSON.stringify(item)], function (r) {
+            root.commentBusy = false
+            var res = root.j(r, {})
+            if (res && res.ok) { commentInput.text = ""; root.refresh() }
+            else root.notify("Couldn't post the comment" + (res && res.error ? ": " + res.error : "."), true)
+        })
+    }
+    function deleteComment(id) {
+        root.coreAsync("deleteExt", [root.editCalId, id], function (r) {
+            var res = root.j(r, {})
+            if (res && res.ok) root.refresh()
+            else root.notify("Couldn't delete the comment" + (res && res.error ? ": " + res.error : "."), true)
+        })
+    }
+    // Merge my optimistic RSVP over the folded map, count a status.
+    function rsvpCount(status) {
+        // Read the LIVE folded event (root.events updates on poll), not the open-time snapshot, so a
+        // peer's RSVP that arrives while the editor is open is counted.
+        var ev = root.editingEvent ? (root.eventById(root.editingEvent.id) || root.editingEvent) : null
+        var m = {}; var r = ev ? ev.rsvps : null
+        if (r) for (var k in r) m[k] = r[k]
+        var me = root.addrFor(root.calById(root.editCalId))
+        if (me) { if (root.evMyRsvp) m[me] = root.evMyRsvp; else delete m[me] }
+        var n = 0; for (var a in m) if (m[a] === status) n++
+        return n
+    }
+    function saveEvent() {
+        var s = parseDateTime(evDate.text, evStart.text)
+        var e = parseDateTime(evDate.text, evEnd.text)
+        if (root.evAllDay) {
+            // all-day → clamp to the day's bounds so downstream code still has valid times
+            s = new Date(s.getFullYear(), s.getMonth(), s.getDate(), 0, 0, 0, 0)
+            e = new Date(s.getFullYear(), s.getMonth(), s.getDate(), 23, 59, 0, 0)
+        } else if (e.getTime() <= s.getTime()) {
+            e = new Date(s.getTime() + 3600000)
+        }
+        var hasSchema = schemaFor(editCalId).length > 0
+        var recur = root.buildRecur()
+        if (editingEvent) {
+            var up = editingEvent
+            delete up.seriesId; delete up.occ    // never persist expanded-occurrence markers
+            up.title = evTitle.text.trim(); up.startTime = s.getTime(); up.endTime = e.getTime(); up.description = evNotes.text.trim()
+            up.allDay = root.evAllDay
+            up.location = evLocation.text.trim()
+            up.url = evUrl.text.trim()
+            up.reminderMin = root.evReminder
+            up.recur = recur    // null clears a previous recurrence
+            if (hasSchema) up.fields = collectFieldVals(editCalId)
+            up.attachments = root.evAttachments
+            root.coreAsync("updateEvent", [JSON.stringify(up)], function () { root.refresh() })
+        } else {
+            var nv = {
+                title: evTitle.text.trim(), startTime: s.getTime(), endTime: e.getTime(),
+                allDay: root.evAllDay, description: evNotes.text.trim(),
+                location: evLocation.text.trim(), url: evUrl.text.trim(), reminderMin: root.evReminder
+            }
+            if (recur) nv.recur = recur
+            if (hasSchema) nv.fields = collectFieldVals(editCalId)
+            if (root.evAttachments.length) nv.attachments = root.evAttachments
+            root.coreAsync("createEvent", [editCalId, JSON.stringify(nv)], function () { root.refresh() })
+            root.lastCalId = editCalId       // preselect this calendar next time
+
+        }
+        eventPopup.close(); refresh()
+    }
+    // Duplicate an existing event in one click → a new event with the same fields (same time; the
+    // user moves/edits it after). Freequencies: fast setup of similar nights. Needs add rights.
+    function duplicateEvent() {
+        if (!root.editingEvent) return
+        var src = root.editingEvent
+        var nv = {
+            title: (src.title || "(untitled)") + " (copy)",
+            startTime: src.startTime, endTime: src.endTime, allDay: !!src.allDay,
+            description: src.description || "", location: src.location || "", url: src.url || "",
+            reminderMin: src.reminderMin || 0
+        }
+        if (src.recur) nv.recur = src.recur
+        if (src.fields) nv.fields = src.fields
+        if (src.attachments && src.attachments.length) nv.attachments = src.attachments
+        root.coreAsync("createEvent", [root.editCalId, JSON.stringify(nv)], function () { root.refresh() })
+        root.lastCalId = root.editCalId
+        eventPopup.close(); refresh()
+        root.notify("Event duplicated")
+    }
+    // Drag & drop: move an event's occurrence to another day, preserving its time-of-day + duration.
+    // Edits the underlying event (LWW upsert). Refuses (with a toast) if you can't edit it.
+    function moveEventToDay(ev, day) {
+        if (!ev || !day) return
+        var s = new Date(ev.startTime)
+        if (root.sameDay(s, day)) return   // dropped on its own day — no-op
+        var c = root.calById(ev.calendarId)
+        if (!root.canEditEvent(c, ev)) { root.notify("You can't move this event.", true); return }
+        var dur = ev.endTime - ev.startTime
+        var ns = new Date(day.getFullYear(), day.getMonth(), day.getDate(), s.getHours(), s.getMinutes(), 0, 0)
+        var up = JSON.parse(JSON.stringify(ev))
+        delete up.seriesId; delete up.occ
+        up.startTime = ns.getTime(); up.endTime = ns.getTime() + dur
+        root.coreAsync("updateEvent", [JSON.stringify(up)], function () { root.refresh() })
+        root.notify((ev.recur ? "Moved series to " : "Moved to ") + Qt.formatDate(ns, "MMM d"))
+    }
+    function deleteEvent() { if (editingEvent) deleteEventPopup.open() }   // confirm first (destructive)
+    function doDeleteEvent() {
+        if (editingEvent) root.coreAsync("deleteEvent", [editingEvent.id], function () { root.refresh() })
+        deleteEventPopup.close(); eventPopup.close(); refresh()
+    }
+
+    // Native file picker for attachments; poll timer for the async upload/download (no blocking IPC).
+    FileDialog {
+        id: attachFileDialog
+        title: "Choose a file to attach"
+        onAccepted: root.onAttachmentPicked(attachFileDialog.selectedFile)
+    }
+    Timer { id: attachPoll; interval: 600; repeat: true; onTriggered: root.pollAttach() }
+
+    // ── toast: surface outcomes/failures instead of the old silent "" swallow ──
+    property string toastMsg: ""
+    property bool toastErr: false
+    function notify(msg, isErr) { root.toastMsg = msg; root.toastErr = !!isErr; toastTimer.restart() }
+    Timer { id: toastTimer; interval: 4500; onTriggered: root.toastMsg = "" }
+    Rectangle {
+        visible: root.toastMsg !== ""
+        z: 99999
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottom: parent.bottom; anchors.bottomMargin: 24
+        width: Math.min(parent.width - 32, toastLbl.implicitWidth + 34)
+        height: toastLbl.implicitHeight + 20; radius: 10
+        color: root.toastErr ? root.cRed : root.cSurface
+        border.width: 1; border.color: root.toastErr ? root.cRed : root.cSurface2
+        LogosText { textFormat: Text.PlainText;
+            id: toastLbl; anchors.centerIn: parent; width: Math.min(root.width - 60, implicitWidth)
+            text: root.toastMsg; color: root.toastErr ? "#ffffff" : root.cText
+            font.pixelSize: 13; wrapMode: Text.WordWrap; horizontalAlignment: Text.AlignHCenter
+        }
+        MouseArea { anchors.fill: parent; onClicked: root.toastMsg = "" }
+    }
+
+    // Drag proxy — a floating card following the cursor while dragging an agenda event onto a day.
+    Rectangle {
+        id: dragProxy; z: 100000; visible: false
+        width: 170; height: 40; radius: 10; opacity: 0.92
+        color: root.cSurface; border.width: 1; border.color: root.cBlue
+        property var dragEv: null
+        Drag.active: dragProxy.visible
+        Drag.hotSpot.x: width / 2; Drag.hotSpot.y: height / 2
+        RowLayout {
+            anchors.fill: parent; anchors.margins: 6; spacing: 5
+            Rectangle { width: 3; height: 24; radius: 1.5; color: dragProxy.dragEv ? root.evColor(dragProxy.dragEv) : "transparent"; Layout.alignment: Qt.AlignVCenter }
+            LogosText { textFormat: Text.PlainText; text: dragProxy.dragEv ? (dragProxy.dragEv.title || "(untitled)") : ""; color: root.cText; font.pixelSize: 12; elide: Text.ElideRight; Layout.fillWidth: true; Layout.alignment: Qt.AlignVCenter }
+        }
+    }
+
+    // ── iCalendar (.ics) import/export (operates on root.setCalId) ─────────────
+    function onIcsExportPicked(fileUrl) {
+        var path = ("" + fileUrl).replace(/^file:\/\//, "")
+        root.coreAsync("exportCalendarIcsFile", [root.setCalId, path], function (raw) {
+            var r = root.j(raw, null)
+            if (r && r.ok) root.notify("Exported " + (r.events || 0) + " event(s) → " + r.path, false)
+            else root.notify("Export failed: " + ((r && r.error) || "unknown"), true)
+        })
+    }
+    function onIcsImportPicked(fileUrl) {
+        var path = ("" + fileUrl).replace(/^file:\/\//, "")
+        root.coreAsync("importIcsFile", [root.setCalId, path], function (raw) {
+            var r = root.j(raw, null)
+            if (r && !r.error && typeof r.imported === "number") {
+                root.notify("Imported " + r.imported + " event(s)" + (r.skipped ? (", skipped " + r.skipped) : ""), false)
+                root.refresh()
+            } else root.notify("Import failed: " + ((r && r.error) || "unknown"), true)
+        })
+    }
+    FileDialog {
+        id: icsSaveDialog
+        title: "Export calendar to .ics"
+        fileMode: FileDialog.SaveFile
+        nameFilters: ["iCalendar (*.ics)", "All files (*)"]
+        onAccepted: root.onIcsExportPicked(icsSaveDialog.selectedFile)
+    }
+    FileDialog {
+        id: icsOpenDialog
+        title: "Import events from .ics"
+        nameFilters: ["iCalendar (*.ics)", "All files (*)"]
+        onAccepted: root.onIcsImportPicked(icsOpenDialog.selectedFile)
+    }
+
     Popup {
-        id: newPopup
+        id: eventPopup
         anchors.centerIn: Overlay.overlay
-        width: 420; modal: true; padding: 20
+        width: 500; modal: true; padding: Theme.spacing.large
         background: Rectangle { radius: 12; color: root.cSurface; border.width: 1; border.color: root.cSurface2 }
+        // Scrolls when the editor is taller than the window (comments, clash list, custom fields).
+        height: Math.min(evCol.implicitHeight + topPadding + bottomPadding, (Overlay.overlay ? Overlay.overlay.height : 800) - 40)
+        Flickable {
+            id: evFlick
+            anchors.fill: parent; clip: true
+            contentWidth: width; contentHeight: evCol.implicitHeight
+            boundsBehavior: Flickable.StopAtBounds
+            ScrollBar.vertical: ScrollBar {}
         ColumnLayout {
-            anchors.fill: parent; spacing: 8
-            LogosText { textFormat: Text.PlainText; text: "New night"; color: root.cText; font.pixelSize: 18; font.weight: Theme.typography.weightMedium }
+            id: evCol
+            width: evFlick.width; spacing: Theme.spacing.small
+            LogosText { textFormat: Text.PlainText; text: root.editingEvent ? "Edit event" : "New event"; color: root.cText; font.pixelSize: 18; font.weight: Theme.typography.weightMedium }
+
             LogosText { textFormat: Text.PlainText; text: "Calendar"; color: root.cFaint; font.pixelSize: 11 }
-            Flow {
-                Layout.fillWidth: true; spacing: 6
-                Repeater {
-                    model: root.freqCals
-                    delegate: Chip { required property var modelData; text: modelData.name || "(unnamed)"; on: root.newCalId === modelData.id; onClicked: root.newCalId = modelData.id }
+            ComboBox {
+                id: evCalSelect
+                Layout.fillWidth: true
+                enabled: !root.editingEvent        // can't move an event to another calendar
+                opacity: enabled ? 1 : 0.6
+                model: root.evCals
+                textRole: "name"
+                currentIndex: {
+                    var m = root.evCals
+                    for (var i = 0; i < m.length; i++) if (m[i].id === root.editCalId) return i
+                    return -1
+                }
+                onActivated: function (index) {
+                    var m = root.evCals
+                    if (index >= 0 && index < m.length) {
+                        root.editCalId = m[index].id
+                        // Re-seed custom fields for the newly-picked calendar — its schema
+                        // differs, so the inputs must rebuild (else fields never show unless
+                        // the target calendar happened to be the one seeded on open).
+                        seedFieldVals(root.editCalId, editingEvent)
+                    }
+                }
+                contentItem: LogosText { textFormat: Text.PlainText;
+                    leftPadding: 10; rightPadding: 28
+                    text: evCalSelect.displayText || "(calendar)"
+                    color: root.cText; font.pixelSize: 14
+                    verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight
+                }
+                background: Rectangle {
+                    implicitHeight: 34; radius: Theme.spacing.radiusSmall; color: root.cBase
+                    border.width: 1; border.color: root.cSurface2
+                }
+                delegate: ItemDelegate {
+                    width: evCalSelect.width
+                    highlighted: evCalSelect.highlightedIndex === index
+                    contentItem: RowLayout {
+                        spacing: 6
+                        Rectangle { width: 10; height: 10; radius: 5; color: root.calColor(modelData.id); Layout.alignment: Qt.AlignVCenter }
+                        LogosText { textFormat: Text.PlainText; text: modelData.name || "(cal)"; color: root.cText; font.pixelSize: 14; elide: Text.ElideRight; Layout.fillWidth: true }
+                    }
+                    background: Rectangle { color: highlighted ? root.cSurface : root.cSurface }
+                }
+                popup: Popup {
+                    y: evCalSelect.height
+                    width: evCalSelect.width
+                    implicitHeight: Math.min(contentItem.implicitHeight + 2, 260)
+                    padding: 1
+                    background: Rectangle { radius: Theme.spacing.radiusSmall; color: root.cSurface; border.width: 1; border.color: root.cSurface2 }
+                    contentItem: ListView {
+                        clip: true
+                        implicitHeight: contentHeight
+                        model: evCalSelect.popup.visible ? evCalSelect.delegateModel : null
+                        currentIndex: evCalSelect.highlightedIndex
+                        ScrollIndicator.vertical: ScrollIndicator {}
+                    }
                 }
             }
-            LogosText { textFormat: Text.PlainText; text: "Name"; color: root.cFaint; font.pixelSize: 11 }
-            Input { id: nTitle; Layout.fillWidth: true; placeholderText: "e.g. Bassline Fridays"; color: root.cText; font.pixelSize: 13 }
-            RowLayout {
-                Layout.fillWidth: true; spacing: 8
-                ColumnLayout { Layout.fillWidth: true; spacing: 4
-                    LogosText { textFormat: Text.PlainText; text: "Date"; color: root.cFaint; font.pixelSize: 11 }
-                    Input { id: nDate; Layout.fillWidth: true; color: root.cText; font.pixelSize: 13 } }
-                ColumnLayout { spacing: 4
-                    LogosText { textFormat: Text.PlainText; text: "Doors"; color: root.cFaint; font.pixelSize: 11 }
-                    Input { id: nStart; Layout.preferredWidth: 70; color: root.cText; font.pixelSize: 13 } }
-                ColumnLayout { spacing: 4
-                    LogosText { textFormat: Text.PlainText; text: "Ends"; color: root.cFaint; font.pixelSize: 11 }
-                    Input { id: nEnd; Layout.preferredWidth: 70; color: root.cText; font.pixelSize: 13 } }
-            }
-            LogosText { textFormat: Text.PlainText; text: "Venue"; color: root.cFaint; font.pixelSize: 11 }
-            Input { id: nVenue; Layout.fillWidth: true; placeholderText: "Where it happens"; color: root.cText; font.pixelSize: 13 }
-            LogosText { textFormat: Text.PlainText; text: "Status"; color: root.cFaint; font.pixelSize: 11 }
-            Flow {
-                Layout.fillWidth: true; spacing: 6
-                Repeater {
-                    model: root.statuses
-                    delegate: Chip { required property var modelData; text: modelData; accent: root.statusColor(modelData); on: root.newStatus === modelData; onClicked: root.newStatus = modelData }
-                }
-            }
-            RowLayout {
-                Layout.fillWidth: true; Layout.topMargin: 8; spacing: 8
-                Item { Layout.fillWidth: true }
-                Btn { text: "Cancel"; onClicked: newPopup.close() }
-                Btn { text: root.creating ? "Adding…" : "Add night"; primary: true; enabled_: !root.creating; onClicked: root.createNight() }
-            }
-        }
-    }
 
-    // ── artist booking ───────────────────────────────────────────────────────────
-    Popup {
-        id: artistPopup
-        anchors.centerIn: Overlay.overlay
-        width: 440; modal: true; padding: 20
-        background: Rectangle { radius: 12; color: root.cSurface; border.width: 1; border.color: root.cSurface2 }
-        ColumnLayout {
-            anchors.fill: parent; spacing: 8
-            LogosText { textFormat: Text.PlainText; Layout.fillWidth: true; elide: Text.ElideRight; color: root.cText; font.pixelSize: 18; font.weight: Theme.typography.weightMedium
-                text: root.aId ? root.kithName({ contact: root.aContact, name: aName.text }) : "Add an artist" }
-            LogosText { textFormat: Text.PlainText; visible: !root.aMine; Layout.fillWidth: true; wrapMode: Text.Wrap; color: root.cFaint; font.pixelSize: 12
-                text: "Only the person who added this booking can change it. Editors can remove it." }
-            LogosText { textFormat: Text.PlainText; visible: !root.aId; text: "From Kith"; color: root.cFaint; font.pixelSize: 11 }
-            LogosText { textFormat: Text.PlainText; visible: !root.aId && root.kithState !== "ok"; Layout.fillWidth: true; wrapMode: Text.Wrap; color: root.cSub; font.pixelSize: 12
-                text: root.kithState === "loading" ? "Reading Kith…"
-                    : root.kithState === "missing" ? "Kith isn't installed or isn't answering. Install the ‘kith’ package to pick artists from your crew's address book, or type a name below."
-                    : "No Kith books yet. Join your crew's artist book in Kith, or type a name below." }
-            Input { id: aSearch; visible: !root.aId && root.kithState === "ok"; Layout.fillWidth: true; placeholderText: "Search artists"; color: root.cText; font.pixelSize: 13; onTextChanged: root.aQuery = text }
-            Flow {
-                visible: !root.aId && root.kithState === "ok"; Layout.fillWidth: true; spacing: 6
-                Repeater {
-                    model: root.aMatches
-                    delegate: Chip { required property var modelData; text: modelData.name; on: root.aContact === modelData.id
-                        onClicked: { root.aContact = modelData.id; root.aBook = modelData.bookId; aName.text = modelData.name } }
-                }
-            }
-            LogosText { textFormat: Text.PlainText; text: "Name" + (root.aContact ? "  ·  linked to Kith" : ""); color: root.cFaint; font.pixelSize: 11 }
-            Input { id: aName; Layout.fillWidth: true; enabled: root.aMine; placeholderText: "Artist name"; color: root.cText; font.pixelSize: 13
-                // Typing a different name unlinks the Kith contact.
-                onTextEdited: { root.aContact = ""; root.aBook = "" } }
-            LogosText { textFormat: Text.PlainText; text: "Set"; color: root.cFaint; font.pixelSize: 11 }
-            Input { id: aSet; Layout.fillWidth: true; enabled: root.aMine; placeholderText: "e.g. 23:00–01:00"; color: root.cText; font.pixelSize: 13 }
-            RowLayout {
-                Layout.fillWidth: true; spacing: 8
-                ColumnLayout { Layout.fillWidth: true; spacing: 4
-                    LogosText { textFormat: Text.PlainText; text: "Fee"; color: root.cFaint; font.pixelSize: 11 }
-                    Input { id: aFee; Layout.fillWidth: true; enabled: root.aMine; placeholderText: "—"; color: root.cText; font.pixelSize: 13 } }
-                ColumnLayout { spacing: 4
-                    LogosText { textFormat: Text.PlainText; text: "Currency"; color: root.cFaint; font.pixelSize: 11 }
-                    Input { id: aCur; Layout.preferredWidth: 80; enabled: root.aMine; maximumLength: 4; color: root.cText; font.pixelSize: 13 } }
-            }
-            LogosText { textFormat: Text.PlainText; text: "Everyone in this calendar can see fees."; color: root.cSub; font.pixelSize: 11 }
-            LogosText { textFormat: Text.PlainText; text: "Status"; color: root.cFaint; font.pixelSize: 11 }
-            Flow {
-                Layout.fillWidth: true; spacing: 6
-                Repeater {
-                    model: root.bookingStatuses
-                    delegate: Chip { required property var modelData; text: root.cap(modelData); accent: root.bookingColor(modelData); on: root.aStatus === modelData
-                        opacity: root.aMine ? 1 : 0.5; onClicked: if (root.aMine) root.aStatus = modelData }
-                }
-            }
-            RowLayout {
-                Layout.fillWidth: true; Layout.topMargin: 8; spacing: 8
-                Btn { visible: root.aCanRemove; text: "Remove"; enabled_: !root.artistBusy; onClicked: root.removeArtist() }
-                Item { Layout.fillWidth: true }
-                Btn { text: root.aMine ? "Cancel" : "Close"; onClicked: artistPopup.close() }
-                Btn { visible: root.aMine; text: root.artistBusy ? "Saving…" : (root.aId ? "Save" : "Add"); primary: true; enabled_: !root.artistBusy; onClicked: root.saveArtist() }
-            }
-        }
-    }
+            LogosText { textFormat: Text.PlainText; text: "Title"; color: root.cFaint; font.pixelSize: 11 }
+            Field { id: evTitle; readOnly: root.eventReadOnly; Layout.fillWidth: true; placeholderText: "Event title" }
 
-    // ── make public ──────────────────────────────────────────────────────────────
-    Popup {
-        id: pubPopup
-        anchors.centerIn: Overlay.overlay
-        width: 440; modal: true; padding: 20
-        background: Rectangle { radius: 12; color: root.cSurface; border.width: 1; border.color: root.cSurface2 }
-        ColumnLayout {
-            anchors.fill: parent; spacing: 8
-            LogosText { textFormat: Text.PlainText; text: "Make this night public"; color: root.cText; font.pixelSize: 18; font.weight: Theme.typography.weightMedium }
-            LogosText { textFormat: Text.PlainText; Layout.fillWidth: true; wrapMode: Text.Wrap; color: root.cSub; font.pixelSize: 12
-                text: "Freequencies keeps a copy of this night in a public calendar and updates it whenever the night changes. The copy has the time, venue, confirmed artists and the guest-list link; never fees, crew, holds, notes or comments." }
-            LogosText { textFormat: Text.PlainText; text: "Publish to"; color: root.cFaint; font.pixelSize: 11 }
+            // all-day toggle — hides the time inputs when on
+            Row {
+                spacing: 8
+                Rectangle {
+                    width: 22; height: 22; radius: 5
+                    color: root.evAllDay ? root.cBlue : root.cBase
+                    border.width: 1; border.color: root.cSurface2
+                    LogosText { textFormat: Text.PlainText; anchors.centerIn: parent; visible: root.evAllDay; text: "✓"; color: root.cBase; font.pixelSize: 14 }
+                    MouseArea { anchors.fill: parent; onClicked: root.evAllDay = !root.evAllDay }
+                }
+                LogosText { textFormat: Text.PlainText; text: "All-day"; color: root.cText; font.pixelSize: 13; anchors.verticalCenter: parent.verticalCenter }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true; spacing: Theme.spacing.small
+                ColumnLayout { Layout.fillWidth: true; LogosText { textFormat: Text.PlainText; text: "Date"; color: root.cFaint; font.pixelSize: 11 }
+                    Field { id: evDate; readOnly: true; Layout.fillWidth: true; placeholderText: "YYYY-MM-DD"
+                        MouseArea { anchors.fill: parent; enabled: !root.eventReadOnly; cursorShape: Qt.PointingHandCursor; onClicked: datePicker.openFor(evDate, evDate.text) } } }
+                ColumnLayout { visible: !root.evAllDay; LogosText { textFormat: Text.PlainText; text: "Start"; color: root.cFaint; font.pixelSize: 11 }
+                    Field { id: evStart; readOnly: true; Layout.preferredWidth: 80; placeholderText: "HH:MM"
+                        MouseArea { anchors.fill: parent; enabled: !root.eventReadOnly; cursorShape: Qt.PointingHandCursor; onClicked: timePicker.openFor(evStart, evStart.text) } } }
+                ColumnLayout { visible: !root.evAllDay; LogosText { textFormat: Text.PlainText; text: "End"; color: root.cFaint; font.pixelSize: 11 }
+                    Field { id: evEnd; readOnly: true; Layout.preferredWidth: 80; placeholderText: "HH:MM"
+                        MouseArea { anchors.fill: parent; enabled: !root.eventReadOnly; cursorShape: Qt.PointingHandCursor; onClicked: timePicker.openFor(evEnd, evEnd.text) } } }
+            }
+
+            LogosText { textFormat: Text.PlainText; text: "Notes"; color: root.cFaint; font.pixelSize: 11 }
+            Field { id: evNotes; readOnly: root.eventReadOnly; Layout.fillWidth: true; placeholderText: "Optional" }
+
+            LogosText { textFormat: Text.PlainText; text: "Location"; color: root.cFaint; font.pixelSize: 11 }
+            Field { id: evLocation; readOnly: root.eventReadOnly; Layout.fillWidth: true; placeholderText: "Where" }
+
+            LogosText { textFormat: Text.PlainText; text: "Meeting link"; color: root.cFaint; font.pixelSize: 11 }
+            Field {
+                id: evUrl; readOnly: root.eventReadOnly; Layout.fillWidth: true; placeholderText: "https://…"
+                inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhUrlCharactersOnly
+            }
+
+            // ── attachments (Logos Storage, sealed with the calendar key) ──
+            LogosText { textFormat: Text.PlainText; text: "Attachments"; color: root.cFaint; font.pixelSize: 11 }
             Repeater {
-                model: root.publicTargets
-                delegate: Rectangle {
-                    required property var modelData
-                    Layout.fillWidth: true; Layout.preferredHeight: 36; radius: 6; color: root.cBase
-                    Rectangle { x: 10; anchors.verticalCenter: parent.verticalCenter; width: 8; height: 8; radius: 4; color: modelData.color || root.cBlue }
-                    LogosText { x: 26; anchors.verticalCenter: parent.verticalCenter; textFormat: Text.PlainText; text: modelData.name; color: root.cText; font.pixelSize: 13 }
-                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.makePublic(modelData.id) }
+                model: root.evAttachments
+                delegate: RowLayout {
+                    Layout.fillWidth: true; spacing: 6
+                    LogosText { textFormat: Text.PlainText;
+                        Layout.fillWidth: true
+                        text: "📎 " + (modelData.name || "file") + (modelData.size ? "  (" + root.humanSize(modelData.size) + ")" : "")
+                        color: root.cBlue; font.pixelSize: 13; elide: Text.ElideMiddle
+                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                            onClicked: root.openAttachment(root.editCalId, modelData.storageCid, modelData.name) }
+                    }
+                    LogosText { textFormat: Text.PlainText;
+                        visible: !root.eventReadOnly; text: "✕"; color: root.cYellow; font.pixelSize: 14
+                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.removeAttachment(index) }
+                    }
                 }
             }
+            LogosText { textFormat: Text.PlainText; visible: root.attachMsg !== ""; text: root.attachMsg; color: root.cSub; font.pixelSize: 11; wrapMode: Text.WordWrap; Layout.fillWidth: true }
             Rectangle {
-                Layout.fillWidth: true; Layout.preferredHeight: 36; radius: 6; color: root.cBase
-                LogosText { x: 10; anchors.verticalCenter: parent.verticalCenter; textFormat: Text.PlainText; text: root.pubBusy ? "Creating…" : "+ New public calendar"; color: root.cBlue; font.pixelSize: 13 }
-                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.newPublicCalendar() }
+                visible: root.attachBusy && root.attachPollMode === "download"
+                Layout.fillWidth: true; height: 4; radius: 2; color: root.cSurface2
+                Rectangle { height: parent.height; radius: 2; color: root.cBlue
+                    width: parent.width * Math.max(0.02, root.attachProgress >= 0 ? root.attachProgress : 0) }
             }
-            LogosText { textFormat: Text.PlainText; Layout.fillWidth: true; wrapMode: Text.Wrap; color: root.cFaint; font.pixelSize: 11
-                text: "Only Closed calendars you own or edit are listed: anyone can read a public calendar, only organisers change it. Copy its link for attendees from the night once it's public." }
-            RowLayout { Layout.fillWidth: true; Item { Layout.fillWidth: true } Btn { text: "Cancel"; onClicked: pubPopup.close() } }
-        }
-    }
+            LogosText { textFormat: Text.PlainText; visible: root.attachBusy && root.attachPollMode === "download"; text: root.attachProgress >= 0 ? Math.round(root.attachProgress * 100) + "%" : "Finding a source…"; color: root.cSub; font.pixelSize: 11 }
+            LogosText { textFormat: Text.PlainText; visible: root.attachBusy && root.attachDiag !== ""; text: root.attachDiag; color: root.cFaint; font.pixelSize: 10; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+            LogosButton {
+                visible: !root.eventReadOnly
+                text: root.attachBusy ? "Working…" : "＋ Attach file"
+                enabled: !root.attachBusy
+                onClicked: attachFileDialog.open()
+            }
 
-    // ── crew slot ────────────────────────────────────────────────────────────────
-    Popup {
-        id: crewPopup
-        anchors.centerIn: Overlay.overlay
-        width: 440; modal: true; padding: 20
-        background: Rectangle { radius: 12; color: root.cSurface; border.width: 1; border.color: root.cSurface2 }
-        ColumnLayout {
-            anchors.fill: parent; spacing: 8
-            LogosText { textFormat: Text.PlainText; Layout.fillWidth: true; elide: Text.ElideRight; color: root.cText; font.pixelSize: 18; font.weight: Theme.typography.weightMedium
-                text: !root.cId ? "Add to the crew" : cName.text ? root.kithName({ contact: root.cContact, name: cName.text }) : "Open: " + cRole.text }
-            LogosText { textFormat: Text.PlainText; visible: !root.cMine; Layout.fillWidth: true; wrapMode: Text.Wrap; color: root.cFaint; font.pixelSize: 12
-                text: "Only the person who added this can change it. Editors can remove it." }
-            LogosText { textFormat: Text.PlainText; text: "Role"; color: root.cFaint; font.pixelSize: 11 }
+            // reminder chips
+            LogosText { textFormat: Text.PlainText; text: "Reminder"; color: root.cFaint; font.pixelSize: 11 }
             Flow {
                 Layout.fillWidth: true; spacing: 6
                 Repeater {
-                    model: root.crewRoles
-                    delegate: Chip { required property var modelData; text: modelData; on: cRole.text === modelData
-                        opacity: root.cMine ? 1 : 0.5; onClicked: if (root.cMine) cRole.text = modelData }
+                    model: root.reminderOpts
+                    delegate: Rectangle {
+                        height: 28; radius: 14; width: remLbl.width + 20
+                        color: root.evReminder === modelData.v ? root.cSurface : root.cBase
+                        border.width: 1
+                        border.color: root.evReminder === modelData.v ? root.cBlue : root.cSurface2
+                        LogosText { textFormat: Text.PlainText; id: remLbl; anchors.centerIn: parent; text: modelData.l; color: root.cText; font.pixelSize: 13 }
+                        MouseArea { anchors.fill: parent; onClicked: root.evReminder = modelData.v }
+                    }
                 }
             }
-            Input { id: cRole; Layout.fillWidth: true; enabled: root.cMine; placeholderText: "Or type a role"; color: root.cText; font.pixelSize: 13 }
-            LogosText { textFormat: Text.PlainText; visible: root.cMine && root.kithState === "ok"; text: "From Kith"; color: root.cFaint; font.pixelSize: 11 }
-            Input { id: cSearch; visible: root.cMine && root.kithState === "ok"; Layout.fillWidth: true; placeholderText: "Search contacts"; color: root.cText; font.pixelSize: 13; onTextChanged: root.cQuery = text }
+
+            // recurrence
+            LogosText { textFormat: Text.PlainText; text: "Repeat"; color: root.cFaint; font.pixelSize: 11 }
             Flow {
-                visible: root.cMine && root.kithState === "ok"; Layout.fillWidth: true; spacing: 6
+                Layout.fillWidth: true; spacing: 6
                 Repeater {
-                    model: root.cMatches
-                    delegate: Chip { required property var modelData; text: modelData.name; on: root.cContact === modelData.id
-                        onClicked: { root.cContact = modelData.id; root.cBook = modelData.bookId; cName.text = modelData.name } }
-                }
-            }
-            LogosText { textFormat: Text.PlainText; text: "Name" + (root.cContact ? "  ·  linked to Kith" : ""); color: root.cFaint; font.pixelSize: 11 }
-            Input { id: cName; Layout.fillWidth: true; enabled: root.cMine; placeholderText: "Leave empty for an open slot"; color: root.cText; font.pixelSize: 13
-                onTextEdited: { root.cContact = ""; root.cBook = "" } }
-            LogosText { textFormat: Text.PlainText; text: "Call time"; color: root.cFaint; font.pixelSize: 11 }
-            Input { id: cCall; Layout.fillWidth: true; enabled: root.cMine; placeholderText: "e.g. 21:30"; color: root.cText; font.pixelSize: 13 }
-            LogosText { textFormat: Text.PlainText; visible: cName.text.trim() !== ""; text: "Status"; color: root.cFaint; font.pixelSize: 11 }
-            Flow {
-                visible: cName.text.trim() !== ""; Layout.fillWidth: true; spacing: 6
-                Repeater {
-                    model: root.bookingStatuses
-                    delegate: Chip { required property var modelData; text: root.cap(modelData); accent: root.bookingColor(modelData); on: root.cStatus === modelData
-                        opacity: root.cMine ? 1 : 0.5; onClicked: if (root.cMine) root.cStatus = modelData }
+                    model: root.recurOpts
+                    delegate: Rectangle {
+                        height: 28; radius: 14; width: recLbl.width + 20
+                        color: root.evRecurFreq === modelData.v ? root.cSurface : root.cBase
+                        border.width: 1
+                        border.color: root.evRecurFreq === modelData.v ? root.cBlue : root.cSurface2
+                        LogosText { textFormat: Text.PlainText; id: recLbl; anchors.centerIn: parent; text: modelData.l; color: root.cText; font.pixelSize: 13 }
+                        MouseArea { anchors.fill: parent; onClicked: root.evRecurFreq = modelData.v }
+                    }
                 }
             }
             RowLayout {
-                Layout.fillWidth: true; Layout.topMargin: 8; spacing: 8
-                Btn { visible: root.cCanRemove; text: "Remove"; enabled_: !root.crewBusy; onClicked: root.removeCrew() }
-                Item { Layout.fillWidth: true }
-                Btn { text: root.cMine ? "Cancel" : "Close"; onClicked: crewPopup.close() }
-                Btn { visible: root.cMine; text: root.crewBusy ? "Saving…" : (root.cId ? "Save" : "Add"); primary: true; enabled_: !root.crewBusy; onClicked: root.saveCrew() }
+                visible: root.evRecurFreq !== ""
+                Layout.fillWidth: true; spacing: Theme.spacing.small
+                ColumnLayout { LogosText { textFormat: Text.PlainText; text: "Every N"; color: root.cFaint; font.pixelSize: 11 } Field { id: evRecurInterval; Layout.preferredWidth: 70; text: "1"; inputMethodHints: Qt.ImhFormattedNumbersOnly; placeholderText: "1" } }
+                ColumnLayout { Layout.fillWidth: true; LogosText { textFormat: Text.PlainText; text: "Until (optional)"; color: root.cFaint; font.pixelSize: 11 } Field { id: evRecurUntil; Layout.fillWidth: true; placeholderText: "YYYY-MM-DD" } }
             }
-        }
-    }
+            LogosText { textFormat: Text.PlainText;
+                visible: root.evRecurFreq !== ""
+                text: root.recurLabel(root.buildRecur())
+                color: root.cSub; font.pixelSize: 12
+            }
 
-    // ── add a form ───────────────────────────────────────────────────────────────
-    Popup {
-        id: formPopup
-        anchors.centerIn: Overlay.overlay
-        width: 440; modal: true; padding: 20
-        background: Rectangle { radius: 12; color: root.cSurface; border.width: 1; border.color: root.cSurface2 }
-        ColumnLayout {
-            anchors.fill: parent; spacing: 8
-            LogosText { textFormat: Text.PlainText; text: "Add a form"; color: root.cText; font.pixelSize: 18; font.weight: Theme.typography.weightMedium }
-            LogosText { textFormat: Text.PlainText; Layout.fillWidth: true; wrapMode: Text.Wrap; color: root.cSub; font.pixelSize: 12
-                text: "A WhisperBox form for " + (root.selMaster ? (root.selMaster.title || "this night") : "this night") + ". Share its link; people answer in the WhisperBox app, and only you can read the answers." }
+            // note when editing a recurring series
+            LogosText { textFormat: Text.PlainText;
+                visible: !!root.editingRecurring()
+                text: "Part of a repeating event — changes apply to the whole series."
+                color: root.cFaint; font.pixelSize: 11; wrapMode: Text.WordWrap; Layout.fillWidth: true
+            }
+
+            // ── custom fields (schema-driven) — nothing rendered for a plain calendar ──
+            ListModel { id: evFieldsModel }
             Repeater {
-                model: root.formPurposes
-                delegate: Rectangle {
-                    id: pr
-                    required property var modelData
-                    Layout.fillWidth: true; Layout.preferredHeight: 44; radius: 8
-                    color: prMa.containsMouse ? root.cSurface2 : root.cMantle; border.width: 1; border.color: root.cSurface2
-                    opacity: root.formBusy ? 0.5 : 1
-                    LogosText { textFormat: Text.PlainText; anchors.verticalCenter: parent.verticalCenter; x: 14; text: pr.modelData.label; color: root.cText; font.pixelSize: 14 }
-                    MouseArea { id: prMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; enabled: !root.formBusy; onClicked: root.addForm(pr.modelData.id) }
-                }
-            }
-            RowLayout {
-                Layout.fillWidth: true; Layout.topMargin: 8
-                LogosText { textFormat: Text.PlainText; visible: root.formBusy; text: "Creating…"; color: root.cSub; font.pixelSize: 12 }
-                Item { Layout.fillWidth: true }
-                Btn { text: "Cancel"; onClicked: formPopup.close() }
-            }
-        }
-    }
-
-    // ── form answers ─────────────────────────────────────────────────────────────
-    Popup {
-        id: respPopup
-        anchors.centerIn: Overlay.overlay
-        width: 520; height: Math.min(root.height - 80, 560); modal: true; padding: 20
-        background: Rectangle { radius: 12; color: root.cSurface; border.width: 1; border.color: root.cSurface2 }
-        ColumnLayout {
-            anchors.fill: parent; spacing: 8
-            LogosText { textFormat: Text.PlainText; Layout.fillWidth: true; elide: Text.ElideRight; text: root.respTitle; color: root.cText; font.pixelSize: 18; font.weight: Theme.typography.weightMedium }
-            LogosText { textFormat: Text.PlainText; visible: root.respRows.length === 0; text: "Reading the answers…"; color: root.cSub; font.pixelSize: 12 }
-            Flickable {
-                Layout.fillWidth: true; Layout.fillHeight: true; clip: true
-                contentHeight: respCol.implicitHeight
-                ColumnLayout {
-                    id: respCol
-                    width: parent.width; spacing: 10
-                    Repeater {
-                        model: root.respRows
-                        delegate: ColumnLayout {
-                            required property var modelData
-                            Layout.fillWidth: true; spacing: 2
-                            LogosText { textFormat: Text.PlainText; text: parent.modelData.head; color: root.cFaint; font.pixelSize: 11 }
-                            Repeater {
-                                model: parent.modelData.lines
-                                delegate: LogosText { required property var modelData; textFormat: Text.PlainText; Layout.fillWidth: true; wrapMode: Text.Wrap; color: root.cText; font.pixelSize: 13; text: modelData }
+                model: evFieldsModel
+                delegate: ColumnLayout {
+                    id: fieldRow
+                    Layout.fillWidth: true; Layout.topMargin: 2; spacing: 3
+                    property int rowIndex: index
+                    property string curVal: model.sval        // reactive: updates on setProperty
+                    property bool curBool: model.bval
+                    property string optsJson: model.opts
+                    LogosText { textFormat: Text.PlainText;
+                        text: (model.label || model.key) + (model.ftype === "number" ? " (number)" : (model.ftype === "url" ? " (url)" : ""))
+                        color: root.cFaint; font.pixelSize: 11
+                    }
+                    // bool → checkbox toggle
+                    Row {
+                        visible: model.ftype === "bool"
+                        spacing: 8
+                        Rectangle {
+                            width: 22; height: 22; radius: 5
+                            color: fieldRow.curBool ? root.cBlue : root.cBase
+                            border.width: 1; border.color: root.cSurface2
+                            LogosText { textFormat: Text.PlainText; anchors.centerIn: parent; visible: fieldRow.curBool; text: "✓"; color: root.cBase; font.pixelSize: 14 }
+                            MouseArea { anchors.fill: parent; onClicked: evFieldsModel.setProperty(fieldRow.rowIndex, "bval", !fieldRow.curBool) }
+                        }
+                        LogosText { textFormat: Text.PlainText; text: fieldRow.curBool ? "Yes" : "No"; color: root.cText; font.pixelSize: 13; anchors.verticalCenter: parent.verticalCenter }
+                    }
+                    // enum → selectable chips from options
+                    Flow {
+                        visible: model.ftype === "enum"
+                        Layout.fillWidth: true; spacing: 6
+                        Repeater {
+                            model: JSON.parse(fieldRow.optsJson || "[]")
+                            delegate: Rectangle {
+                                height: 28; radius: 14; width: chipLbl.width + 20
+                                color: fieldRow.curVal === modelData ? root.cSurface : root.cBase
+                                border.width: 1
+                                border.color: fieldRow.curVal === modelData ? root.cBlue : root.cSurface2
+                                LogosText { textFormat: Text.PlainText; id: chipLbl; anchors.centerIn: parent; text: modelData; color: root.cText; font.pixelSize: 13 }
+                                MouseArea { anchors.fill: parent; onClicked: evFieldsModel.setProperty(fieldRow.rowIndex, "sval", modelData) }
                             }
                         }
+                    }
+                    // everything else → a Field (numeric for number, no autocapitalize for url)
+                    Field {
+                        visible: model.ftype !== "bool" && model.ftype !== "enum"
+                        Layout.fillWidth: true
+                        text: model.sval
+                        inputMethodHints: model.ftype === "number" ? Qt.ImhFormattedNumbersOnly
+                                          : (model.ftype === "url" ? (Qt.ImhNoAutoUppercase | Qt.ImhUrlCharactersOnly) : Qt.ImhNone)
+                        placeholderText: model.ftype === "date" ? "YYYY-MM-DD"
+                                         : (model.ftype === "datetime" ? "YYYY-MM-DD HH:MM"
+                                         : (model.ftype === "color" ? "#rrggbb"
+                                         : (model.ftype === "url" ? "https://…" : "")))
+                        onTextChanged: evFieldsModel.setProperty(fieldRow.rowIndex, "sval", text)
+                    }
+                }
+            }
+
+            // ── clash warning: other events in this calendar overlap this occurrence (a hint, not a block) ──
+            Rectangle {
+                readonly property var clashList: root.editingEvent !== null ? root.clashesOf(root.editingOcc) : []
+                visible: clashList.length > 0
+                Layout.fillWidth: true; Layout.topMargin: Theme.spacing.small
+                implicitHeight: clashCol.implicitHeight + 16
+                color: "transparent"; radius: 8; border.width: 1; border.color: root.cRed
+                Column {
+                    id: clashCol
+                    anchors { left: parent.left; right: parent.right; top: parent.top; margins: 8 }
+                    spacing: 2
+                    LogosText {
+                        textFormat: Text.PlainText; color: root.cRed; font.pixelSize: 12; font.weight: Theme.typography.weightMedium
+                        text: "⚠ Overlaps " + (parent.parent.clashList.length === 1 ? "another event" : parent.parent.clashList.length + " other events") + " in this calendar"
+                    }
+                    Repeater {
+                        model: parent.parent.clashList.slice(0, 5)
+                        delegate: LogosText {
+                            textFormat: Text.PlainText; color: root.cText; font.pixelSize: 12; elide: Text.ElideRight; width: clashCol.width
+                            text: (modelData.title || "(untitled)") + " · " + new Date(modelData.startTime).toLocaleDateString() + " " + root.fmtTime(modelData.startTime) + "–" + root.fmtTime(modelData.endTime)
+                        }
+                    }
+                }
+            }
+
+            // ── comments (ADR 0024): any member may comment; authors and owners/editors may delete ──
+            ColumnLayout {
+                id: commentsBox
+                readonly property var list: root.editingEvent !== null ? root.commentsOf(root.editingEvent) : []
+                visible: root.editingEvent !== null
+                Layout.fillWidth: true; Layout.topMargin: Theme.spacing.small; spacing: 6
+                LogosText { textFormat: Text.PlainText; text: "Comments" + (commentsBox.list.length ? " (" + commentsBox.list.length + ")" : ""); color: root.cFaint; font.pixelSize: 11 }
+                Repeater {
+                    model: commentsBox.list
+                    delegate: ColumnLayout {
+                        required property var modelData
+                        readonly property bool mine: modelData.author === root.addrFor(root.calById(root.editCalId))
+                        Layout.fillWidth: true; spacing: 2
+                        RowLayout {
+                            Layout.fillWidth: true; spacing: 8
+                            LogosText { textFormat: Text.PlainText; Layout.fillWidth: true; elide: Text.ElideRight; color: root.cSub; font.pixelSize: 11
+                                text: (parent.parent.mine ? "You" : String(parent.parent.modelData.author).substring(0, 8) + "…") + " · " + Qt.formatDateTime(new Date(parent.parent.modelData.hlc.wall), "d MMM hh:mm") }
+                            LogosText { textFormat: Text.PlainText; visible: parent.parent.mine || root.isEditorMe(root.calById(root.editCalId)); text: "Delete"; color: root.cRed; font.pixelSize: 11
+                                MouseArea { anchors.fill: parent; anchors.margins: -4; cursorShape: Qt.PointingHandCursor; onClicked: root.deleteComment(parent.parent.parent.modelData.id) } }
+                        }
+                        LogosText { textFormat: Text.PlainText; Layout.fillWidth: true; wrapMode: Text.Wrap; color: root.cText; font.pixelSize: 13
+                            text: (parent.modelData.data && typeof parent.modelData.data.text === "string") ? parent.modelData.data.text : "(empty)" }
+                    }
+                }
+                LogosText { textFormat: Text.PlainText; visible: !root.coreHasComments; Layout.fillWidth: true; wrapMode: Text.Wrap; color: root.cSub; font.pixelSize: 12
+                    text: "Update the ‘scala’ package to 0.12.0+ in Basecamp to post comments." }
+                RowLayout {
+                    visible: root.coreHasComments
+                    Layout.fillWidth: true; spacing: 8
+                    TextField {
+                        id: commentInput
+                        Layout.fillWidth: true; placeholderText: "Add a comment…"; color: root.cText; font.pixelSize: 13
+                        onAccepted: root.postComment(text)
+                    }
+                    Rectangle {
+                        width: postLbl.implicitWidth + 24; height: 32; radius: 8
+                        opacity: commentInput.text.trim() === "" || root.commentBusy ? 0.4 : 1
+                        color: root.cSurface; border.width: 1; border.color: root.cSurface2
+                        LogosText { id: postLbl; textFormat: Text.PlainText; anchors.centerIn: parent; text: root.commentBusy ? "Posting…" : "Post"; color: root.cText; font.pixelSize: 13 }
+                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.postComment(commentInput.text) }
+                    }
+                }
+            }
+
+            // ── RSVP (ADR 0021) — your own attendance; any member can set it ──
+            ColumnLayout {
+                visible: root.editingEvent !== null
+                Layout.fillWidth: true; Layout.topMargin: Theme.spacing.small; spacing: 4
+                LogosText { textFormat: Text.PlainText; text: "Your RSVP"; color: root.cFaint; font.pixelSize: 11 }
+                Flow {
+                    Layout.fillWidth: true; spacing: 6
+                    Repeater {
+                        model: [{ k: "going", l: "Going" }, { k: "maybe", l: "Maybe" }, { k: "no", l: "No" }]
+                        delegate: Rectangle {
+                            height: 28; radius: 14; width: rsvpLbl.width + 20
+                            color: root.evMyRsvp === modelData.k ? root.cSurface : root.cBase
+                            border.width: 1
+                            border.color: root.evMyRsvp === modelData.k ? root.cBlue : root.cSurface2
+                            LogosText { textFormat: Text.PlainText; id: rsvpLbl; anchors.centerIn: parent; text: modelData.l; color: root.cText; font.pixelSize: 13 }
+                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.setRsvp(modelData.k) }
+                        }
+                    }
+                }
+                LogosText { textFormat: Text.PlainText;
+                    text: root.rsvpCount("going") + " going · " + root.rsvpCount("maybe") + " maybe · " + root.rsvpCount("no") + " no"
+                    color: root.cSub; font.pixelSize: 11
+                }
+            }
+
+            // ── edit history (only when editing an existing event) ──
+            ColumnLayout {
+                visible: root.editingEvent !== null && root.evHistory && root.evHistory.length > 0
+                Layout.fillWidth: true; Layout.topMargin: Theme.spacing.small; spacing: 2
+                LogosText { textFormat: Text.PlainText; text: "History"; color: root.cFaint; font.pixelSize: 11 }
+                Repeater {
+                    model: root.evHistory || []
+                    delegate: LogosText { textFormat: Text.PlainText;
+                        Layout.fillWidth: true
+                        text: "· " + (modelData.action || "changed")
+                              + ((modelData.action === "edited" && modelData.changed && modelData.changed.length) ? " (" + modelData.changed.join(", ") + ")" : "")
+                              + " by " + root.shortAuthor(modelData.author)
+                              + " — " + Qt.formatDateTime(new Date(modelData.at), "MMM d, hh:mm")
+                        color: root.cSub; font.pixelSize: 11; elide: Text.ElideRight
+                    }
+                }
+            }
+
+            // Inline validation error (only while editable).
+            LogosText { textFormat: Text.PlainText;
+                visible: !root.eventReadOnly && root.eventError() !== ""
+                text: root.eventError()
+                color: root.cYellow; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true
+            }
+            // Read-only reason (ADR 0013): say WHY you can't edit instead of a silent locked form.
+            Rectangle {
+                visible: root.eventReadOnly
+                Layout.fillWidth: true; radius: Theme.spacing.radiusSmall
+                color: Qt.rgba(0.98, 0.89, 0.55, 0.10); border.width: 1; border.color: root.cYellow
+                implicitHeight: roLabel.implicitHeight + 2 * Theme.spacing.small
+                ColumnLayout {
+                    anchors.fill: parent; anchors.margins: Theme.spacing.small; spacing: 2
+                    LogosText { textFormat: Text.PlainText; text: "🔒 Read-only"; color: root.cYellow; font.pixelSize: 12; font.weight: Theme.typography.weightMedium }
+                    LogosText { textFormat: Text.PlainText;
+                        id: roLabel
+                        text: root.readonlyReason(root.calById(root.editCalId), root.editingEvent)
+                        color: root.cYellow; font.pixelSize: 11; wrapMode: Text.WordWrap; Layout.fillWidth: true
+                    }
+                }
+            }
+            RowLayout {
+                Layout.fillWidth: true; Layout.topMargin: Theme.spacing.small; spacing: Theme.spacing.small
+                LogosButton { visible: root.editingEvent !== null && !root.eventReadOnly; text: "Delete"; onClicked: root.deleteEvent() }
+                LogosButton { visible: root.editingEvent !== null && root.canAddTo(root.calById(root.editCalId)); text: "Duplicate"; onClicked: root.duplicateEvent() }
+                Item { Layout.fillWidth: true }
+                LogosButton { text: "Cancel"; onClicked: eventPopup.close() }
+                LogosButton { visible: !root.eventReadOnly; text: root.editingEvent ? "Save" : "Create"; enabled: root.eventError() === ""; onClicked: root.saveEvent() }
+            }
+        }
+        }
+    }
+
+    // ── date picker (month grid) — writes YYYY-MM-DD into a target Field ───────
+    Popup {
+        id: datePicker
+        property var targetField: null
+        property date pickMonth: new Date()
+        function openFor(field, curText) {
+            targetField = field
+            var d = /^\d{4}-\d{2}-\d{2}$/.test((curText || "").trim()) ? new Date(curText.trim() + "T00:00:00") : new Date()
+            pickMonth = new Date(d.getFullYear(), d.getMonth(), 1)
+            open()
+        }
+        anchors.centerIn: Overlay.overlay
+        width: 300; modal: true; padding: Theme.spacing.large
+        background: Rectangle { radius: 12; color: root.cSurface; border.width: 1; border.color: root.cSurface2 }
+        ColumnLayout {
+            anchors.fill: parent; spacing: Theme.spacing.small
+            RowLayout {
+                Layout.fillWidth: true
+                LogosButton { text: "‹"; onClicked: datePicker.pickMonth = new Date(datePicker.pickMonth.getFullYear(), datePicker.pickMonth.getMonth() - 1, 1) }
+                LogosText { textFormat: Text.PlainText; Layout.fillWidth: true; horizontalAlignment: Text.AlignHCenter; text: root.monthNames[datePicker.pickMonth.getMonth()] + " " + datePicker.pickMonth.getFullYear(); color: root.cText; font.pixelSize: 15 }
+                LogosButton { text: "›"; onClicked: datePicker.pickMonth = new Date(datePicker.pickMonth.getFullYear(), datePicker.pickMonth.getMonth() + 1, 1) }
+            }
+            Row {
+                Layout.alignment: Qt.AlignHCenter
+                Repeater { model: root.weekDays; delegate: LogosText { textFormat: Text.PlainText; width: 38; horizontalAlignment: Text.AlignHCenter; text: modelData.substring(0, 1); color: root.cFaint; font.pixelSize: 10 } }
+            }
+            Grid {
+                columns: 7; Layout.alignment: Qt.AlignHCenter; rowSpacing: 2; columnSpacing: 2
+                Repeater {
+                    model: 42
+                    delegate: Rectangle {
+                        width: 38; height: 32; radius: 6
+                        property date cd: {
+                            var first = new Date(datePicker.pickMonth.getFullYear(), datePicker.pickMonth.getMonth(), 1)
+                            var offset = (first.getDay() + 6) % 7
+                            return new Date(first.getFullYear(), first.getMonth(), 1 - offset + index)
+                        }
+                        property bool inMonth: cd.getMonth() === datePicker.pickMonth.getMonth()
+                        property bool today: root.sameDay(cd, new Date())
+                        color: today ? root.cSurface : "transparent"
+                        border.width: today ? 1 : 0; border.color: root.cBlue
+                        LogosText { textFormat: Text.PlainText; anchors.centerIn: parent; text: cd.getDate(); color: inMonth ? root.cText : root.cFaint; font.pixelSize: 12 }
+                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { if (datePicker.targetField) datePicker.targetField.text = root.fmtDateInput(cd); datePicker.close() } }
+                    }
+                }
+            }
+            LogosButton { Layout.alignment: Qt.AlignRight; text: "Cancel"; onClicked: datePicker.close() }
+        }
+    }
+
+    // ── time picker (hour + minute columns) — writes HH:MM into a target Field ─
+    Popup {
+        id: timePicker
+        property var targetField: null
+        property int selHour: 9
+        property int selMin: 0
+        function openFor(field, curText) {
+            targetField = field
+            var m = /^(\d{1,2}):(\d{2})$/.exec((curText || "").trim())
+            selHour = m ? Math.max(0, Math.min(23, parseInt(m[1]))) : 9
+            selMin = m ? Math.max(0, Math.min(59, parseInt(m[2]))) : 0
+            open()
+        }
+        anchors.centerIn: Overlay.overlay
+        width: 260; height: 340; modal: true; padding: Theme.spacing.large
+        background: Rectangle { radius: 12; color: root.cSurface; border.width: 1; border.color: root.cSurface2 }
+        ColumnLayout {
+            anchors.fill: parent; spacing: Theme.spacing.small
+            LogosText { textFormat: Text.PlainText; text: "Pick time"; color: root.cText; font.pixelSize: 15; font.weight: Theme.typography.weightMedium }
+            RowLayout {
+                Layout.fillWidth: true; Layout.fillHeight: true; spacing: Theme.spacing.small
+                ListView {
+                    id: hourList; Layout.fillWidth: true; Layout.fillHeight: true; clip: true
+                    model: 24; currentIndex: timePicker.selHour
+                    ScrollBar.vertical: ScrollBar {}
+                    delegate: Rectangle {
+                        width: ListView.view.width; height: 30; radius: 5
+                        color: timePicker.selHour === index ? root.cBlue : "transparent"
+                        LogosText { textFormat: Text.PlainText; anchors.centerIn: parent; text: root.pad(index); color: timePicker.selHour === index ? root.cBase : root.cText; font.pixelSize: 13 }
+                        MouseArea { anchors.fill: parent; onClicked: timePicker.selHour = index }
+                    }
+                }
+                LogosText { textFormat: Text.PlainText; text: ":"; color: root.cText; font.pixelSize: 18 }
+                ListView {
+                    id: minList; Layout.fillWidth: true; Layout.fillHeight: true; clip: true
+                    model: 12; currentIndex: Math.round(timePicker.selMin / 5)
+                    ScrollBar.vertical: ScrollBar {}
+                    delegate: Rectangle {
+                        width: ListView.view.width; height: 30; radius: 5
+                        property int mv: index * 5
+                        color: timePicker.selMin === mv ? root.cBlue : "transparent"
+                        LogosText { textFormat: Text.PlainText; anchors.centerIn: parent; text: root.pad(index * 5); color: timePicker.selMin === mv ? root.cBase : root.cText; font.pixelSize: 13 }
+                        MouseArea { anchors.fill: parent; onClicked: timePicker.selMin = mv }
                     }
                 }
             }
             RowLayout {
                 Layout.fillWidth: true
                 Item { Layout.fillWidth: true }
-                Btn { text: "Close"; onClicked: respPopup.close() }
+                LogosButton { text: "Cancel"; onClicked: timePicker.close() }
+                LogosButton { text: "Set"; onClicked: { if (timePicker.targetField) timePicker.targetField.text = root.pad(timePicker.selHour) + ":" + root.pad(timePicker.selMin); timePicker.close() } }
             }
         }
     }
 
-    // ── toast ────────────────────────────────────────────────────────────────────
-    Rectangle {
-        visible: root.toastMsg !== ""
-        anchors.bottom: parent.bottom; anchors.horizontalCenter: parent.horizontalCenter; anchors.bottomMargin: 20
-        width: Math.min(parent.width - 40, toastT.implicitWidth + 32); height: toastT.implicitHeight + 18; radius: 10
-        color: root.toastErr ? "#4a2530" : root.cSurface2
-        LogosText { id: toastT; textFormat: Text.PlainText; anchors.centerIn: parent; width: Math.min(implicitWidth, root.width - 72); wrapMode: Text.Wrap
-            text: root.toastMsg; color: root.toastErr ? root.cRed : root.cText; font.pixelSize: 13 }
+    // ── identities popup (loam ADR 0004: service in loam_core, UI here) ────────
+    property string newIdentityLabel: ""
+    Popup {
+        id: identitiesPopup
+        anchors.centerIn: Overlay.overlay
+        width: 460; modal: true; padding: Theme.spacing.large
+        background: Rectangle { radius: 12; color: root.cSurface; border.width: 1; border.color: root.cSurface2 }
+        ColumnLayout {
+            width: parent.width; spacing: Theme.spacing.medium
+            LogosText { textFormat: Text.PlainText; text: "Identities"; color: root.cText; font.pixelSize: 18; font.weight: Theme.typography.weightMedium }
+            LogosText { textFormat: Text.PlainText; text: "Keys live in loam_core and never leave it. ★ = default for new calendars — tap an identity to make it the default."
+                color: root.cFaint; font.pixelSize: 11; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+            Repeater {
+                model: root.identities
+                RowLayout {
+                    Layout.fillWidth: true; spacing: Theme.spacing.small
+                    MouseArea {
+                        Layout.fillWidth: true; implicitHeight: idCol.implicitHeight; cursorShape: Qt.PointingHandCursor
+                        onClicked: { root.loamAsync("setDefaultIdentityId", [modelData.id], function () { root.refreshIdentities() }) }
+                        ColumnLayout {
+                            id: idCol; width: parent.width; spacing: 0
+                            LogosText { textFormat: Text.PlainText;
+                                text: (modelData.id === root.defaultIdentityId ? "★ " : "  ") + modelData.label
+                                      + "  ·  " + (modelData.kind === "keycard" ? "💳 Keycard" : modelData.kind)
+                                color: root.cText; font.pixelSize: 13
+                            }
+                            LogosText { textFormat: Text.PlainText; text: (modelData.address || "").substring(0, 14) + "…" + (modelData.address || "").slice(-4); color: root.cFaint; font.pixelSize: 10; font.family: "monospace" }
+                        }
+                    }
+                    LogosButton {
+                        visible: modelData.kind === "soft"; text: "✎"
+                        onClicked: { root.renameTargetId = modelData.id; renameField.text = modelData.label; idRenamePopup.open() }
+                    }
+                    LogosButton {
+                        visible: modelData.kind === "soft" || modelData.kind === "keycard"; text: "✕"
+                        // Guarded: removing an identity you sign calendars with orphans them (you can no
+                        // longer author there). Confirm + warn how many, instead of firing immediately.
+                        onClicked: {
+                            root.idRemoveId = modelData.id; root.idRemoveKind = modelData.kind
+                            root.idRemoveLabel = modelData.label; root.idRemoveAddr = modelData.address || ""
+                            idRemovePopup.open()
+                        }
+                    }
+                }
+            }
+            RowLayout {
+                Layout.fillWidth: true; Layout.topMargin: Theme.spacing.small; spacing: Theme.spacing.small
+                LogosTextField { id: newIdField; Layout.fillWidth: true; placeholderText: "new software identity name"; text: root.newIdentityLabel; onTextChanged: root.newIdentityLabel = text }
+                LogosButton {
+                    text: "+ Add"
+                    onClicked: { root.loamAsync("addSoftIdentity", [newIdField.text.trim() || "Identity"], function () { root.refreshIdentities() }); newIdField.text = "" }
+                }
+            }
+            // Enrol a physical Keycard as a loam identity (loam owns all keycard logic; scala just
+            // triggers it + shows the overlay). One card = one identity across phone + desktop.
+            RowLayout {
+                Layout.fillWidth: true; spacing: Theme.spacing.small
+                LogosTextField { id: kcLabelField; Layout.fillWidth: true; placeholderText: "Keycard identity name" }
+                LogosButton {
+                    text: "💳 Enroll Keycard"
+                    onClicked: { root.coreAsync("enrollKeycard", [kcLabelField.text.trim() || "My Keycard", "scala"]); kcLabelField.text = ""; identitiesPopup.close() }
+                }
+            }
+            RowLayout {
+                Layout.fillWidth: true; Layout.topMargin: Theme.spacing.small
+                Item { Layout.fillWidth: true }
+                LogosButton { text: "Close"; onClicked: identitiesPopup.close() }
+            }
+        }
+    }
+
+    // ── rename a soft identity ───────────────────────────────────────────────
+    Popup {
+        id: idRenamePopup
+        anchors.centerIn: Overlay.overlay
+        width: 360; modal: true; padding: Theme.spacing.large
+        background: Rectangle { radius: 12; color: root.cSurface; border.width: 1; border.color: root.cSurface2 }
+        ColumnLayout {
+            width: parent.width; spacing: Theme.spacing.medium
+            LogosText { textFormat: Text.PlainText; text: "Rename identity"; color: root.cText; font.pixelSize: 16; font.weight: Theme.typography.weightMedium }
+            LogosTextField { id: renameField; Layout.fillWidth: true; placeholderText: "Identity name" }
+            RowLayout {
+                Layout.fillWidth: true; spacing: Theme.spacing.small
+                Item { Layout.fillWidth: true }
+                LogosButton { text: "Cancel"; onClicked: idRenamePopup.close() }
+                LogosButton {
+                    text: "Save"
+                    onClicked: {
+                        var nm = renameField.text.trim()
+                        if (nm.length && root.renameTargetId) root.loamAsync("renameSoftIdentity", [root.renameTargetId, nm], function () { root.refreshIdentities() })
+                        idRenamePopup.close()
+                    }
+                }
+            }
+        }
+    }
+
+    // ── confirm identity removal (warns if it signs calendars → orphans them) ─
+    Popup {
+        id: idRemovePopup
+        anchors.centerIn: Overlay.overlay
+        width: 400; modal: true; padding: Theme.spacing.large
+        background: Rectangle { radius: 12; color: root.cSurface; border.width: 1; border.color: root.cSurface2 }
+        readonly property int owned: root.identitySignsCount(root.idRemoveAddr)
+        ColumnLayout {
+            width: parent.width; spacing: Theme.spacing.medium
+            LogosText { textFormat: Text.PlainText; text: "Remove “" + root.idRemoveLabel + "”?"; color: root.cText; font.pixelSize: 16; font.weight: Theme.typography.weightMedium; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+            LogosText { textFormat: Text.PlainText;
+                Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 13
+                color: idRemovePopup.owned > 0 ? root.cRed : root.cFaint
+                text: idRemovePopup.owned > 0
+                    ? "⚠️ This identity signs " + idRemovePopup.owned + " calendar" + (idRemovePopup.owned === 1 ? "" : "s") + " on this device. Removing it orphans them — you won't be able to author there until you rebind another identity (a calendar's ⚙ → Signs as)."
+                    : (root.idRemoveKind === "keycard"
+                        ? "Forgets this Keycard on this device. The card itself is unchanged; re-enrol to use it again."
+                        : "This soft identity's key is deleted from loam_core and cannot be recovered.")
+            }
+            RowLayout {
+                Layout.fillWidth: true; spacing: Theme.spacing.small
+                Item { Layout.fillWidth: true }
+                LogosButton { text: "Cancel"; onClicked: idRemovePopup.close() }
+                LogosButton {
+                    text: idRemovePopup.owned > 0 ? "Remove anyway" : "Remove"
+                    onClicked: {
+                        root.loamAsync(root.idRemoveKind === "keycard" ? "removeKeycardIdentity" : "removeSoftIdentity", [root.idRemoveId],
+                                       function () { root.refreshIdentities(); root.refresh() })
+                        idRemovePopup.close()
+                    }
+                }
+            }
+        }
+    }
+
+    // "Appear as" (ADR 0022): which Loam identity a NEW or JOINED calendar signs with. Shown only when
+    // Loam has a root. "ctx" = a new identity just for this calendar (default, unlinkable), "main" =
+    // the identity family and friends know, "other" = one of this device's classic identities.
+    readonly property var appearChoices: [
+        { k: "ctx",   title: "A new identity just for this calendar", desc: "Nobody can link it to your other calendars. Recommended." },
+        { k: "main",  title: "My main identity", desc: "The one your family and friends know — for a household calendar." },
+        { k: "other", title: "Another identity on this device", desc: "A device, software or Keycard identity, as before." }
+    ]
+    component AppearChooser: ColumnLayout {
+        id: ac
+        property string sel: "ctx"
+        signal pick(string k)
+        spacing: Theme.spacing.small
+        LogosText { textFormat: Text.PlainText; text: "Appear as"; color: root.cFaint; font.pixelSize: 11 }
+        Repeater {
+            model: root.appearChoices
+            Rectangle {
+                Layout.fillWidth: true
+                radius: Theme.spacing.radiusSmall
+                color: ac.sel === modelData.k ? root.cSurface : "transparent"
+                border.width: 1
+                border.color: ac.sel === modelData.k ? root.cBlue : root.cSurface2
+                implicitHeight: acRow.implicitHeight + 2 * Theme.spacing.small
+                RowLayout {
+                    id: acRow
+                    anchors.left: parent.left; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                    anchors.margins: Theme.spacing.small; spacing: Theme.spacing.small
+                    Rectangle {
+                        Layout.alignment: Qt.AlignTop; width: 16; height: 16; radius: 8; color: "transparent"
+                        border.width: 2; border.color: ac.sel === modelData.k ? root.cBlue : root.cSurface2
+                        Rectangle { anchors.centerIn: parent; width: 8; height: 8; radius: 4; color: root.cBlue; visible: ac.sel === modelData.k }
+                    }
+                    ColumnLayout {
+                        Layout.fillWidth: true; spacing: 0
+                        LogosText { textFormat: Text.PlainText; text: modelData.title; color: root.cText; font.pixelSize: 13 }
+                        LogosText { textFormat: Text.PlainText; text: modelData.desc; color: root.cSub; font.pixelSize: 11; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+                    }
+                }
+                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: ac.pick(modelData.k) }
+            }
+        }
+        LogosText { textFormat: Text.PlainText
+            visible: !root.hd.unlocked && ac.sel !== "other"
+            text: "Loam is locked. Unlock your identity in Loam — until then your changes here wait on this device."
+            color: root.cYellow; font.pixelSize: 11; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+    }
+    property string newCalAppear: "ctx"
+    property string joinAppear: "ctx"
+    // The identity argument for createCalendar / handleShareLink: a Loam HD binding, or a classic id.
+    function appearArg(appear, legacyId) { return (root.hd.exists && appear !== "other") ? "loam:" + appear : legacyId }
+
+    // ── new-calendar popup ───────────────────────────────────────────────────
+    property string newCalTier: "closed"    // access tier (ADR 0019): closed | open | collaborative — default Closed
+    property string newCalIdentity: ""      // "author as" (loam identity) — "" = pick createDefaultOwner
+    // The owner a NEW calendar gets when the user hasn't explicitly tapped a chip: the global default —
+    // UNLESS that default is a keycard. A keycard must be an EXPLICIT choice, never the silent default,
+    // or a keycard-default user is forced into a card tap just to create a calendar (and, pre-fix, trapped
+    // in the sign overlay). Mirrors loam's own "a keycard default never silently signs" rule. Soft/device
+    // defaults are still honored (WYSIWYG). Re-evaluates when identities/default change.
+    readonly property string createDefaultOwner: {
+        var d = root.defaultIdentityId
+        for (var i = 0; i < root.identities.length; i++)
+            if (root.identities[i].id === d) return root.identities[i].kind === "keycard" ? "device" : d
+        return d
+    }
+    property string joinIdentity: ""         // "author as" for a joined calendar
+    property bool joinBusy: false            // a handleShareLink call is in flight (no double join)
+    property string ncNewType: "text"   // staged field type in the new-calendar add-row
+    // Add a custom field to the NEW-calendar schema (mirrors addSchemaField).
+    function addNcField() {
+        var k = ncNewKey.text.trim()
+        if (k === "") return
+        var opts = []
+        if (root.ncNewType === "enum") {
+            var parts = ncNewOptions.text.split(",")
+            for (var i = 0; i < parts.length; i++) { var p = parts[i].trim(); if (p.length) opts.push(p) }
+        }
+        newCalSchemaModel.append({ key: k, label: ncNewLabel.text.trim() || k, ftype: root.ncNewType, opts: JSON.stringify(opts) })
+        ncNewKey.text = ""; ncNewLabel.text = ""; ncNewOptions.text = ""; root.ncNewType = "text"
+    }
+    Popup {
+        id: newCalPopup
+        anchors.centerIn: Overlay.overlay
+        width: 500; modal: true; padding: Theme.spacing.large
+        background: Rectangle { radius: 12; color: root.cSurface; border.width: 1; border.color: root.cSurface2 }
+        onOpened: {
+            newCalName.text = ""; newCalDesc.text = ""; root.newCalTier = "closed"; root.newCalIdentity = ""; root.newCalAppear = "ctx"
+            root.refreshHd()
+            newCalSchemaModel.clear(); ncNewKey.text = ""; ncNewLabel.text = ""; ncNewOptions.text = ""; root.ncNewType = "text"
+        }
+        function createNow() {
+            // core returns are double-JSON-encoded — unwrap with j() (like getIdentity/
+            // listCalendars) or the id comes back quoted and updateCalendarMeta targets the
+            // WRONG calendar, so description/custom-fields silently never save on create.
+            // Color is DERIVED from the calendar id (calColor), never chosen — pass "".
+            // Bind the RESOLVED owner — the explicit pick, or (nothing picked) createDefaultOwner
+            // (the global default, but never silently a keycard). WYSIWYG: the highlighted chip owns +
+            // signs the calendar; a keycard only owns it if the user explicitly taps it.
+            if (root.creatingCal) return
+            var calName = newCalName.text.trim(), calOwner = root.appearArg(root.newCalAppear, (root.newCalIdentity || root.createDefaultOwner))
+            var sch = []
+            for (var i = 0; i < newCalSchemaModel.count; i++) {
+                var it = newCalSchemaModel.get(i)
+                var e = { key: it.key, label: it.label, type: it.ftype }
+                var o = JSON.parse(it.opts || "[]")
+                if (it.ftype === "enum") e.options = o
+                sch.push(e)
+            }
+            var d = newCalDesc.text.trim()
+            // Fold up the create-time meta in one cal.meta write. `open` only needs writing
+            // when Restricted (open defaults to true in the fold).
+            var meta = {}
+            if (d !== "") meta.description = d
+            if (sch.length > 0) meta.schema = sch
+            // Access tier (ADR 0019) → the {open,collab} pair. Closed needs open:false written
+            // explicitly (the fold defaults open=true); collaborative writes both true.
+            var tm = root.calTierMeta(root.newCalTier)
+            meta.open = tm.open
+            meta.collab = tm.collab
+            root.creatingCal = true
+            root.coreAsync("createCalendar", [calName, "", calOwner], function (r) {
+                root.creatingCal = false
+                var id = String(root.j(r, ""))
+                newCalPopup.close()
+                if (id === "") { root.refresh(); root.notify("Couldn't create the calendar.", true); return }
+                if (Object.keys(meta).length > 0) root.coreAsync("updateCalendarMeta", [id, JSON.stringify(meta)], function () { root.refresh() })
+                else root.refresh()
+            })
+        }
+        ColumnLayout {
+            anchors.fill: parent; spacing: Theme.spacing.small
+
+            LogosText { textFormat: Text.PlainText; text: "New calendar"; color: root.cText; font.pixelSize: 18; font.weight: Theme.typography.weightMedium }
+
+            Flickable {
+                Layout.fillWidth: true
+                Layout.preferredHeight: Math.min(contentHeight, 520)
+                contentWidth: width; contentHeight: newCalBody.implicitHeight
+                clip: true
+                ScrollBar.vertical: ScrollBar {}
+                ColumnLayout {
+                    id: newCalBody
+                    width: parent.width; spacing: Theme.spacing.small
+
+                    LogosText { textFormat: Text.PlainText; text: "Name"; color: root.cFaint; font.pixelSize: 11 }
+                    Field { id: newCalName; Layout.fillWidth: true; placeholderText: "Calendar name" }
+
+                    LogosText { textFormat: Text.PlainText; text: "Description"; color: root.cFaint; font.pixelSize: 11 }
+                    Field { id: newCalDesc; Layout.fillWidth: true; placeholderText: "Optional description" }
+
+                    AppearChooser {
+                        visible: root.hd.exists; Layout.fillWidth: true
+                        sel: root.newCalAppear; onPick: function (k) { root.newCalAppear = k }
+                    }
+                    // Author as — which loam identity OWNS + signs this calendar (loam ADR 0004).
+                    LogosText { textFormat: Text.PlainText; text: "Author as"; color: root.cFaint; font.pixelSize: 11
+                        visible: !root.hd.exists || root.newCalAppear === "other" }
+                    Flow {
+                        visible: !root.hd.exists || root.newCalAppear === "other"
+                        Layout.fillWidth: true; spacing: Theme.spacing.small
+                        Repeater {
+                            model: root.identities
+                            Rectangle {
+                                // selected = explicitly picked, or (nothing picked yet) the default. Inlined
+                                // like the working field-type chips so the binding re-evaluates on click.
+                                radius: Theme.spacing.radiusSmall
+                                color: (root.newCalIdentity === modelData.id || (root.newCalIdentity === "" && modelData.id === root.createDefaultOwner)) ? root.cBlue : root.cSurface
+                                border.width: 1
+                                border.color: (root.newCalIdentity === modelData.id || (root.newCalIdentity === "" && modelData.id === root.createDefaultOwner)) ? root.cBlue : root.cSurface2
+                                implicitHeight: chipT.implicitHeight + 10; implicitWidth: chipT.implicitWidth + 22
+                                LogosText { textFormat: Text.PlainText; id: chipT; anchors.centerIn: parent; text: modelData.label; font.pixelSize: 12; color: root.cText }
+                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.newCalIdentity = modelData.id }
+                            }
+                        }
+                    }
+                    LogosText { textFormat: Text.PlainText; text: "This identity owns the calendar and signs its events."; color: root.cFaint; font.pixelSize: 10; wrapMode: Text.WordWrap; Layout.fillWidth: true
+                        visible: !root.hd.exists || root.newCalAppear === "other" }
+                    // Explain the divergence when the global default is a Keycard: we pre-select This device
+                    // so creating a calendar doesn't force a card tap. Pick the Keycard chip to own it with the card.
+                    LogosText { textFormat: Text.PlainText;
+                        visible: root.createDefaultOwner !== root.defaultIdentityId && root.newCalIdentity === "" && (!root.hd.exists || root.newCalAppear === "other")
+                        text: "Your default is a 🔑 Keycard — new calendars use This device unless you pick the card, so you're not asked to tap on every calendar."
+                        color: root.cFaint; font.pixelSize: 10; wrapMode: Text.WordWrap; Layout.fillWidth: true
+                    }
+
+                    Rectangle { Layout.fillWidth: true; height: 1; color: root.cSurface2; Layout.topMargin: 4 }
+
+                    // ── custom fields editor (same as Calendar settings) ──
+                    LogosText { textFormat: Text.PlainText; text: "Custom fields"; color: root.cText; font.pixelSize: 14; font.weight: Theme.typography.weightMedium }
+                    LogosText { textFormat: Text.PlainText;
+                        visible: newCalSchemaModel.count === 0
+                        text: "Optional. Add typed fields to collect extra info on each event (venue, lineup…). You can also edit these later in the calendar's ⚙ settings."
+                        color: root.cFaint; font.pixelSize: 11; wrapMode: Text.WordWrap; Layout.fillWidth: true
+                    }
+                    Repeater {
+                        model: newCalSchemaModel
+                        delegate: Rectangle {
+                            Layout.fillWidth: true; implicitHeight: 34; radius: Theme.spacing.radiusSmall; color: root.cMantle
+                            RowLayout {
+                                anchors.fill: parent; anchors.leftMargin: Theme.spacing.small; anchors.rightMargin: Theme.spacing.small; spacing: Theme.spacing.small
+                                LogosText { textFormat: Text.PlainText; text: (model.label || model.key); color: root.cText; font.pixelSize: 13; Layout.fillWidth: true; elide: Text.ElideRight }
+                                LogosText { textFormat: Text.PlainText; text: model.ftype; color: root.cSub; font.pixelSize: 12 }
+                                LogosText { textFormat: Text.PlainText;
+                                    text: "✕"; color: root.cFaint; font.pixelSize: 14
+                                    MouseArea { anchors.fill: parent; anchors.margins: -4; onClicked: newCalSchemaModel.remove(index) }
+                                }
+                            }
+                        }
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true; spacing: Theme.spacing.small
+                        Field { id: ncNewKey; Layout.fillWidth: true; placeholderText: "key" }
+                        Field { id: ncNewLabel; Layout.fillWidth: true; placeholderText: "label" }
+                    }
+                    Flow {
+                        Layout.fillWidth: true; spacing: 6
+                        Repeater {
+                            model: root.fieldTypes
+                            delegate: Rectangle {
+                                height: 26; radius: 13; width: ncTLbl.width + 18
+                                color: root.ncNewType === modelData ? root.cSurface : root.cBase
+                                border.width: 1; border.color: root.ncNewType === modelData ? root.cBlue : root.cSurface2
+                                LogosText { textFormat: Text.PlainText; id: ncTLbl; anchors.centerIn: parent; text: modelData; color: root.cText; font.pixelSize: 12 }
+                                MouseArea { anchors.fill: parent; onClicked: root.ncNewType = modelData }
+                            }
+                        }
+                    }
+                    Field {
+                        id: ncNewOptions
+                        visible: root.ncNewType === "enum"
+                        Layout.fillWidth: true; placeholderText: "enum options (comma-separated)"
+                    }
+                    LogosButton { text: "+ Add field"; enabled: ncNewKey.text.trim().length > 0; onClicked: root.addNcField() }
+
+                    ListModel { id: newCalSchemaModel }
+                }
+            }
+
+            // Access — one 3-way tier (ADR 0019 ladder: Closed→Open→Collaborative) instead of two
+            // independent toggles, so the off-ladder "collaborative + closed" combo can't be created.
+            LogosText { textFormat: Text.PlainText; text: "Access"; color: root.cFaint; font.pixelSize: 11; Layout.topMargin: Theme.spacing.small }
+            Repeater {
+                model: root.accessTiers
+                Rectangle {
+                    Layout.fillWidth: true
+                    radius: Theme.spacing.radiusSmall
+                    color: (root.newCalTier === modelData.tier) ? root.cSurface : "transparent"
+                    border.width: 1
+                    border.color: (root.newCalTier === modelData.tier) ? root.cBlue : root.cSurface2
+                    implicitHeight: ncTierRow.implicitHeight + 2 * Theme.spacing.small
+                    RowLayout {
+                        id: ncTierRow
+                        anchors.left: parent.left; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                        anchors.margins: Theme.spacing.small; spacing: Theme.spacing.small
+                        Rectangle {
+                            Layout.alignment: Qt.AlignTop; width: 16; height: 16; radius: 8; color: "transparent"
+                            border.width: 2; border.color: (root.newCalTier === modelData.tier) ? root.cBlue : root.cSurface2
+                            Rectangle { anchors.centerIn: parent; width: 8; height: 8; radius: 4; color: root.cBlue; visible: root.newCalTier === modelData.tier }
+                        }
+                        ColumnLayout {
+                            Layout.fillWidth: true; spacing: 0
+                            LogosText { textFormat: Text.PlainText; text: modelData.title; color: root.cText; font.pixelSize: 13 }
+                            LogosText { textFormat: Text.PlainText; text: modelData.desc; color: root.cSub; font.pixelSize: 11; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+                        }
+                    }
+                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.newCalTier = modelData.tier }
+                }
+            }
+
+            // Signatures-required — the fold DROPS any unsigned event (ADR 0015). The core enforces
+
+            RowLayout {
+                Layout.fillWidth: true; Layout.topMargin: Theme.spacing.small
+                Item { Layout.fillWidth: true }
+                LogosButton { text: "Cancel"; onClicked: newCalPopup.close() }
+                LogosButton {
+                    text: "Create"; enabled: newCalName.text.trim().length > 0
+                    onClicked: newCalPopup.createNow()
+                }
+            }
+        }
+    }
+
+    // ── per-calendar settings popup (name/description, schema, roles) ──────────
+    property string setCalId: ""
+    property string calSetIdentity: ""      // the identity currently signing setCalId (for the rebind chips)
+    property string setNewType: "text"      // staged field type in the add-row
+    property string setNewRole: "editor"    // staged role in the add-member row
+    property bool creatingCal: false         // a createCalendar call is in flight (no double create)
+
+    function openCalSettings(cal) {
+        setCalId = cal.id
+        root.loadCalendarIdentity(cal.id)   // which identity signs my events here (rebindable)
+        setName.text = cal.name || ""
+        setDesc.text = cal.description || ""
+        setSchemaModel.clear()
+        var sch = (cal.schema && cal.schema.length) ? cal.schema : []
+        for (var i = 0; i < sch.length; i++) {
+            setSchemaModel.append({
+                key: sch[i].key, label: sch[i].label || sch[i].key,
+                ftype: sch[i].type || "text", opts: JSON.stringify(sch[i].options || [])
+            })
+        }
+        setNewKey.text = ""; setNewLabel.text = ""; setNewOptions.text = ""; root.setNewType = "text"
+        setNewMember.text = ""; root.setNewRole = "editor"
+        root.setSaveError = ""
+        calSettingsPopup.open()
+    }
+    function addSchemaField() {
+        var k = setNewKey.text.trim()
+        if (k === "") return
+        var opts = []
+        if (root.setNewType === "enum") {
+            var parts = setNewOptions.text.split(",")
+            for (var i = 0; i < parts.length; i++) { var p = parts[i].trim(); if (p.length) opts.push(p) }
+        }
+        setSchemaModel.append({
+            key: k, label: setNewLabel.text.trim() || k,
+            ftype: root.setNewType, opts: JSON.stringify(opts)
+        })
+        setNewKey.text = ""; setNewLabel.text = ""; setNewOptions.text = ""; root.setNewType = "text"
+    }
+    property string setSaveError: ""
+    function saveCalSettings() {
+        root.setSaveError = ""
+        var sch = []
+        for (var i = 0; i < setSchemaModel.count; i++) {
+            var it = setSchemaModel.get(i)
+            var e = { key: it.key, label: it.label, type: it.ftype }
+            var o = JSON.parse(it.opts || "[]")
+            if (it.ftype === "enum") e.options = o
+            sch.push(e)
+        }
+        var wantKeys = []
+        for (var k = 0; k < sch.length; k++) wantKeys.push(sch[k].key)
+        wantKeys.sort()
+        var savedId = setCalId
+        root.coreAsync("updateCalendarMeta", [savedId, JSON.stringify({ name: setName.text.trim(), description: setDesc.text.trim(), schema: sch })], function () {
+            // VERIFY the core actually persisted it, against a FRESH listCalendars. An out-of-date core
+            // silently no-ops updateCalendarMeta (added in scala 0.7.0), so a save would appear to
+            // succeed but vanish — surface that instead of failing quietly.
+            root.coreAsync("listCalendars", [], function (raw) {
+                var cals = root.j(raw, []), now = null
+                for (var c = 0; c < cals.length; c++) if (cals[c].id === savedId) now = cals[c]
+                var gotKeys = []
+                if (now && now.schema) for (var g = 0; g < now.schema.length; g++) gotKeys.push(now.schema[g].key)
+                gotKeys.sort()
+                root.refresh()
+                if (JSON.stringify(gotKeys) !== JSON.stringify(wantKeys)) {
+                    root.setSaveError = "Couldn't save — your Scala core module looks out of date. Update 'scala' to 0.8.0 in the package manager (custom fields need core 0.7.0+), then try again."
+                    return // keep the popup open so the message is seen
+                }
+                calSettingsPopup.close()
+            })
+        })
+    }
+    // Members = owner (not removable) + each roles entry.
+    function membersFor(calId) {
+        var c = calById(calId); if (!c) return []
+        var out = []
+        if (c.owner) out.push({ id: c.owner, role: "owner", removable: false })
+        var r = c.roles || {}
+        for (var key in r) { if (key === c.owner) continue; out.push({ id: key, role: r[key], removable: true }) }
+        return out
+    }
+    function canManage(calId) {
+        var c = calById(calId); if (!c) return false
+        var a = root.addrFor(c); if (c.owner && c.owner === a) return true
+        var r = c.roles || {}
+        return r[a] === "editor" || r[a] === "admin"
+    }
+    // Add by identity (ADR 0022): an identity link (loam://id?pub=…; the core computes the address
+    // from the key, so a typo can't grant a role to nobody) or a plain 0x address.
+    property bool memberBusy: false
+    function addMember() {
+        var id = setNewMember.text.trim(); if (id === "" || root.memberBusy) return
+        var role = root.setNewRole
+        root.memberBusy = true
+        root.coreAsync("addMemberByIdentity", [setCalId, id, role], function (r) {
+            root.memberBusy = false
+            var res = root.j(r, null)
+            if (!res || !res.ok) { root.notify("Couldn't add: " + ((res && res.error) ? res.error : "no answer from the Scala core"), true); return }
+            setNewMember.text = ""
+            root.refresh(); root.notify("Added " + root.shortAuthor(res.member) + " as " + role + ".", false)
+        })
+    }
+    function removeMember(id) {
+        if (root.memberBusy) return
+        root.memberBusy = true
+        root.coreAsync("removeMember", [setCalId, id], function (r) {
+            root.memberBusy = false
+            var ok = root.j(r, false) === true
+            root.refresh(); root.notify(ok ? "Removed " + root.shortAuthor(id) + "." : "Couldn't remove the member.", !ok)
+        })
+    }
+    // ── invite tickets (ADR 0022) ──
+    property bool inviteBusy: false
+    function invitesFor(calId) {
+        var c = calById(calId); if (!c || !c.invites) return []
+        var out = [], links = c.inviteLinks || {}
+        for (var t in c.invites) out.push({ ticket: t, role: c.invites[t], link: links[t] || "" })
+        return out
+    }
+    function createInvite(role) {
+        if (root.inviteBusy) return
+        root.inviteBusy = true
+        var calId = root.setCalId
+        root.coreAsync("createInvite", [calId, role], function (r) {
+            root.inviteBusy = false
+            var res = root.j(r, null)
+            if (!res || !res.ok) { root.notify("Couldn't create the invite: " + ((res && res.error) ? res.error : "no answer from the Scala core"), true); return }
+            root.refresh()
+            root.openInviteLink(root.calById(calId), role, res.link)
+        })
+    }
+    function openInviteLink(cal, role, link) {
+        root.shareCal = cal
+        root.shareIsInvite = true
+        shareTitle.text = "Invite as " + role + " — " + ((cal && cal.name) ? cal.name : "calendar")
+        shareStatus.text = "Whoever opens this link first becomes " + (role === "editor" ? "an editor" : "a viewer")
+            + ". Share it privately, and withdraw it in ⚙ if it goes unused."
+        root.setShareQr(link)
+        sharePopup.open()
+    }
+    function revokeInvite(ticket) {
+        if (root.inviteBusy) return
+        root.inviteBusy = true
+        root.coreAsync("revokeInvite", [root.setCalId, ticket], function (r) {
+            root.inviteBusy = false
+            var ok = root.j(r, false) === true
+            root.refresh(); root.notify(ok ? "Invite withdrawn." : "Couldn't withdraw the invite.", !ok)
+        })
+    }
+    function claimText(c) {
+        var st = (c && c.claim) ? (c.claim.state || "") : ""
+        if (st === "waiting") return "Waiting for your invite to sync…" + (c.claim.note ? " (" + c.claim.note + ")" : "")
+        if (st === "posted") return "Invite sent — your role shows once it has synced."
+        if (st === "" || st === "redeemed") return ""
+        return c.claim.note || ("Invite: " + st)
+    }
+
+    Popup {
+        id: calSettingsPopup
+        anchors.centerIn: Overlay.overlay
+        width: 500; modal: true; padding: Theme.spacing.large
+        background: Rectangle { radius: 12; color: root.cSurface; border.width: 1; border.color: root.cSurface2 }
+        ColumnLayout {
+            anchors.fill: parent; spacing: Theme.spacing.small
+
+            LogosText { textFormat: Text.PlainText; text: "Calendar settings"; color: root.cText; font.pixelSize: 18; font.weight: Theme.typography.weightMedium }
+
+            // scrollable body — this popup can get tall
+            Flickable {
+                Layout.fillWidth: true
+                Layout.preferredHeight: Math.min(contentHeight, 520)
+                id: settingsFlick
+                contentWidth: width; contentHeight: settingsBody.implicitHeight
+                clip: true
+                ScrollBar.vertical: ScrollBar {}
+                ColumnLayout {
+                    id: settingsBody
+                    width: parent.width; spacing: Theme.spacing.small
+
+                    LogosText { textFormat: Text.PlainText; text: "Name"; color: root.cFaint; font.pixelSize: 11 }
+                    Field { id: setName; Layout.fillWidth: true; placeholderText: "Calendar name" }
+
+                    LogosText { textFormat: Text.PlainText; text: "Description"; color: root.cFaint; font.pixelSize: 11 }
+                    Field { id: setDesc; Layout.fillWidth: true; placeholderText: "Optional description" }
+
+                    Rectangle { Layout.fillWidth: true; height: 1; color: root.cSurface2; Layout.topMargin: 4 }
+
+                    // ── signing identity (rebind) — which of MY identities signs my events here. The
+                    // OWNER is fixed at creation; this only changes who I author as. Tapping a Keycard
+                    // makes my future writes need a card tap.
+                    LogosText { textFormat: Text.PlainText; text: "Signs as"; color: root.cText; font.pixelSize: 14; font.weight: Theme.typography.weightMedium }
+                    // A calendar bound to a Loam identity keeps it (switching would cost your role here).
+                    LogosText { textFormat: Text.PlainText
+                        visible: { var c = root.calById(root.setCalId); return !!c && !!c.binding }
+                        text: { var c = root.calById(root.setCalId); if (!c || !c.binding) return ""
+                                var a = root.calAddr[c.id] || ""
+                                return root.bindingLabel(c.binding) + " (Loam) · " + (a ? root.shortAuthor(a) : "unlock Loam to see the address") }
+                        color: root.cText; font.pixelSize: 13; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+                    Flow {
+                        visible: { var c = root.calById(root.setCalId); return !c || !c.binding }
+                        Layout.fillWidth: true; spacing: Theme.spacing.small
+                        Repeater {
+                            model: root.identities
+                            Rectangle {
+                                radius: Theme.spacing.radiusSmall
+                                color: (root.calSetIdentity === modelData.id) ? root.cBlue : root.cSurface
+                                border.width: 1
+                                border.color: (root.calSetIdentity === modelData.id) ? root.cBlue : root.cSurface2
+                                implicitHeight: setIdChipT.implicitHeight + 10; implicitWidth: setIdChipT.implicitWidth + 22
+                                LogosText { textFormat: Text.PlainText; id: setIdChipT; anchors.centerIn: parent
+                                    text: (modelData.kind === "keycard" ? "🔑 " : "") + modelData.label; font.pixelSize: 12; color: root.cText }
+                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                    onClicked: { root.calSetIdentity = modelData.id; root.loamAsync("bindContainer", [root.setCalId, modelData.id], function () { root.refresh() }) } }
+                            }
+                        }
+                    }
+                    LogosText { textFormat: Text.PlainText
+                        text: { var c = root.calById(root.setCalId); return (c && c.binding) ? "Your Loam identity for this calendar is fixed: your role here belongs to it."
+                                                                                       : "Changes who signs your future events on this calendar; the owner is unchanged." }
+                        color: root.cFaint; font.pixelSize: 10; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+
+                    Rectangle { Layout.fillWidth: true; height: 1; color: root.cSurface2; Layout.topMargin: 4 }
+
+                    // ── custom fields editor ──
+                    LogosText { textFormat: Text.PlainText; text: "Custom fields"; color: root.cText; font.pixelSize: 14; font.weight: Theme.typography.weightMedium }
+                    LogosText { textFormat: Text.PlainText;
+                        visible: setSchemaModel.count === 0
+                        text: "No custom fields yet. Add one below to collect extra info on each event."
+                        color: root.cFaint; font.pixelSize: 11; wrapMode: Text.WordWrap; Layout.fillWidth: true
+                    }
+                    Repeater {
+                        model: setSchemaModel
+                        delegate: Rectangle {
+                            Layout.fillWidth: true; implicitHeight: 34; radius: Theme.spacing.radiusSmall; color: root.cMantle
+                            RowLayout {
+                                anchors.fill: parent; anchors.leftMargin: Theme.spacing.small; anchors.rightMargin: Theme.spacing.small; spacing: Theme.spacing.small
+                                LogosText { textFormat: Text.PlainText; text: (model.label || model.key); color: root.cText; font.pixelSize: 13; Layout.fillWidth: true; elide: Text.ElideRight }
+                                LogosText { textFormat: Text.PlainText; text: model.ftype; color: root.cSub; font.pixelSize: 12 }
+                                LogosText { textFormat: Text.PlainText;
+                                    text: "✕"; color: root.cFaint; font.pixelSize: 14
+                                    MouseArea { anchors.fill: parent; anchors.margins: -4; onClicked: setSchemaModel.remove(index) }
+                                }
+                            }
+                        }
+                    }
+
+                    // add-field row
+                    RowLayout {
+                        Layout.fillWidth: true; spacing: Theme.spacing.small
+                        Field { id: setNewKey; Layout.fillWidth: true; placeholderText: "key" }
+                        Field { id: setNewLabel; Layout.fillWidth: true; placeholderText: "label" }
+                    }
+                    Flow {
+                        Layout.fillWidth: true; spacing: 6
+                        Repeater {
+                            model: root.fieldTypes
+                            delegate: Rectangle {
+                                height: 26; radius: 13; width: tLbl.width + 18
+                                color: root.setNewType === modelData ? root.cSurface : root.cBase
+                                border.width: 1; border.color: root.setNewType === modelData ? root.cBlue : root.cSurface2
+                                LogosText { textFormat: Text.PlainText; id: tLbl; anchors.centerIn: parent; text: modelData; color: root.cText; font.pixelSize: 12 }
+                                MouseArea { anchors.fill: parent; onClicked: root.setNewType = modelData }
+                            }
+                        }
+                    }
+                    Field {
+                        id: setNewOptions
+                        visible: root.setNewType === "enum"
+                        Layout.fillWidth: true; placeholderText: "enum options (comma-separated)"
+                    }
+                    LogosButton { text: "+ Add field"; enabled: setNewKey.text.trim().length > 0; onClicked: root.addSchemaField() }
+
+                    Rectangle { Layout.fillWidth: true; height: 1; color: root.cSurface2; Layout.topMargin: 4 }
+
+                    // ── sharing & roles ──
+                    LogosText { textFormat: Text.PlainText; text: "Sharing & roles"; color: root.cText; font.pixelSize: 14; font.weight: Theme.typography.weightMedium }
+                    // Access tier (ADR 0019) — one 3-way choice (Closed→Open→Collaborative) instead of
+                    // independent Open/Collaborative toggles, so the off-ladder "collaborative + closed"
+                    // combo can't be produced. Same widget as the New-calendar dialog. Owner/editor only.
+                    ColumnLayout {
+                        visible: root.canManage(root.setCalId)
+                        Layout.fillWidth: true; spacing: Theme.spacing.small
+                        LogosText { textFormat: Text.PlainText; text: "Access"; color: root.cFaint; font.pixelSize: 11 }
+                        Repeater {
+                            model: root.accessTiers
+                            Rectangle {
+                                Layout.fillWidth: true
+                                radius: Theme.spacing.radiusSmall
+                                color: (root.calTierOf(root.calById(root.setCalId)) === modelData.tier) ? root.cSurface : "transparent"
+                                border.width: 1
+                                border.color: (root.calTierOf(root.calById(root.setCalId)) === modelData.tier) ? root.cBlue : root.cSurface2
+                                implicitHeight: setTierRow.implicitHeight + 2 * Theme.spacing.small
+                                RowLayout {
+                                    id: setTierRow
+                                    anchors.left: parent.left; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                                    anchors.margins: Theme.spacing.small; spacing: Theme.spacing.small
+                                    Rectangle {
+                                        Layout.alignment: Qt.AlignTop; width: 16; height: 16; radius: 8; color: "transparent"
+                                        border.width: 2; border.color: (root.calTierOf(root.calById(root.setCalId)) === modelData.tier) ? root.cBlue : root.cSurface2
+                                        Rectangle { anchors.centerIn: parent; width: 8; height: 8; radius: 4; color: root.cBlue; visible: root.calTierOf(root.calById(root.setCalId)) === modelData.tier }
+                                    }
+                                    ColumnLayout {
+                                        Layout.fillWidth: true; spacing: 0
+                                        LogosText { textFormat: Text.PlainText; text: modelData.title; color: root.cText; font.pixelSize: 13 }
+                                        LogosText { textFormat: Text.PlainText; text: modelData.desc; color: root.cFaint; font.pixelSize: 11; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+                                    }
+                                }
+                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { root.coreAsync("updateCalendarMeta", [root.setCalId, JSON.stringify(root.calTierMeta(modelData.tier))], function () { root.refresh() }) } }
+                            }
+                        }
+                    }
+                    LogosText { textFormat: Text.PlainText;
+                        text: "Invite people with a one-time link, or add someone by their identity. Editors can edit any event; viewers are read-only."
+                        color: root.cFaint; font.pixelSize: 11; wrapMode: Text.WordWrap; Layout.fillWidth: true
+                    }
+                    LogosText { textFormat: Text.PlainText
+                        visible: text !== ""
+                        text: root.claimText(root.calById(root.setCalId))
+                        color: root.cYellow; font.pixelSize: 11; wrapMode: Text.WordWrap; Layout.fillWidth: true
+                    }
+
+                    LogosText { textFormat: Text.PlainText;
+                        visible: { var c = root.calById(root.setCalId); return !!c && c.rolesConfigured === false }
+                        text: "No members yet — anyone with the calendar link can add events (and edit their own). Invite an editor to let someone edit everyone's; a viewer for read-only."
+                        color: root.cYellow; font.pixelSize: 11; wrapMode: Text.WordWrap; Layout.fillWidth: true
+                    }
+
+                    // ── Members: owner + roles ──
+                    LogosText { textFormat: Text.PlainText; text: "Members"; color: root.cFaint; font.pixelSize: 11 }
+                    Repeater {
+                        model: root.membersFor(root.setCalId)
+                        delegate: Rectangle {
+                            Layout.fillWidth: true; implicitHeight: 34; radius: Theme.spacing.radiusSmall; color: root.cMantle
+                            RowLayout {
+                                anchors.fill: parent; anchors.leftMargin: Theme.spacing.small; anchors.rightMargin: Theme.spacing.small; spacing: Theme.spacing.small
+                                LogosText { textFormat: Text.PlainText
+                                    text: root.shortAuthor(modelData.id) + (modelData.id === root.addrFor(root.calById(root.setCalId)) ? "  (you)" : "")
+                                    color: root.cText; font.pixelSize: 13; Layout.fillWidth: true; elide: Text.ElideRight }
+                                LogosText { textFormat: Text.PlainText; text: modelData.role; color: root.cSub; font.pixelSize: 12 }
+                                LogosText { textFormat: Text.PlainText
+                                    visible: modelData.removable && root.canManage(root.setCalId)
+                                    text: "Remove"; color: root.memberBusy ? root.cFaint : root.cRed; font.pixelSize: 12
+                                    MouseArea { anchors.fill: parent; anchors.margins: -4; cursorShape: Qt.PointingHandCursor; enabled: !root.memberBusy
+                                        onClicked: root.removeMember(modelData.id) }
+                                }
+                            }
+                        }
+                    }
+
+                    // ── Pending invites (folded `invites`) ──
+                    LogosText { textFormat: Text.PlainText; text: "Pending invites"; color: root.cFaint; font.pixelSize: 11
+                        visible: root.invitesFor(root.setCalId).length > 0 }
+                    Repeater {
+                        model: root.invitesFor(root.setCalId)
+                        delegate: Rectangle {
+                            Layout.fillWidth: true; implicitHeight: 34; radius: Theme.spacing.radiusSmall; color: root.cMantle
+                            RowLayout {
+                                anchors.fill: parent; anchors.leftMargin: Theme.spacing.small; anchors.rightMargin: Theme.spacing.small; spacing: Theme.spacing.small
+                                LogosText { textFormat: Text.PlainText; text: "Invite · " + root.shortAuthor(modelData.ticket)
+                                    color: root.cText; font.pixelSize: 13; Layout.fillWidth: true; elide: Text.ElideRight }
+                                LogosText { textFormat: Text.PlainText; text: modelData.role; color: root.cSub; font.pixelSize: 12 }
+                                LogosText { textFormat: Text.PlainText
+                                    visible: modelData.link !== ""
+                                    text: "Link"; color: root.cBlue; font.pixelSize: 12
+                                    MouseArea { anchors.fill: parent; anchors.margins: -4; cursorShape: Qt.PointingHandCursor
+                                        onClicked: root.openInviteLink(root.calById(root.setCalId), modelData.role, modelData.link) }
+                                }
+                                LogosText { textFormat: Text.PlainText
+                                    visible: root.canManage(root.setCalId)
+                                    text: "Revoke"; color: root.inviteBusy ? root.cFaint : root.cRed; font.pixelSize: 12
+                                    MouseArea { anchors.fill: parent; anchors.margins: -4; cursorShape: Qt.PointingHandCursor; enabled: !root.inviteBusy
+                                        onClicked: root.revokeInvite(modelData.ticket) }
+                                }
+                            }
+                        }
+                    }
+
+                    // ── Invite + add by identity (owner/editor only) ──
+                    RowLayout {
+                        visible: root.canManage(root.setCalId)
+                        Layout.fillWidth: true; spacing: Theme.spacing.small
+                        LogosButton { text: "Invite as editor"; enabled: !root.inviteBusy; onClicked: root.createInvite("editor") }
+                        LogosButton { text: "Invite as viewer"; enabled: !root.inviteBusy; onClicked: root.createInvite("viewer") }
+                        Item { Layout.fillWidth: true }
+                    }
+                    ColumnLayout {
+                        visible: root.canManage(root.setCalId)
+                        Layout.fillWidth: true; spacing: Theme.spacing.small
+                        LogosText { textFormat: Text.PlainText; text: "Add by identity"; color: root.cFaint; font.pixelSize: 11 }
+                        Field { id: setNewMember; Layout.fillWidth: true; placeholderText: "loam://id?pub=… or a 0x… address" }
+                        RowLayout {
+                            Layout.fillWidth: true; spacing: 6
+                            Repeater {
+                                model: ["editor", "viewer"]
+                                delegate: Rectangle {
+                                    height: 26; radius: 13; width: rLbl.width + 18
+                                    color: root.setNewRole === modelData ? root.cSurface : root.cBase
+                                    border.width: 1; border.color: root.setNewRole === modelData ? root.cBlue : root.cSurface2
+                                    LogosText { textFormat: Text.PlainText; id: rLbl; anchors.centerIn: parent; text: modelData; color: root.cText; font.pixelSize: 12 }
+                                    MouseArea { anchors.fill: parent; onClicked: root.setNewRole = modelData }
+                                }
+                            }
+                            Item { Layout.fillWidth: true }
+                            LogosButton { text: "Add"; enabled: setNewMember.text.trim().length > 0 && !root.memberBusy; onClicked: root.addMember() }
+                        }
+                    }
+                }
+            }
+
+            ListModel { id: setSchemaModel }
+
+            LogosText { textFormat: Text.PlainText;
+                visible: root.setSaveError !== ""
+                text: root.setSaveError
+                color: root.cYellow; font.pixelSize: 12; wrapMode: Text.WordWrap
+                Layout.fillWidth: true; Layout.topMargin: Theme.spacing.small
+            }
+            RowLayout {
+                Layout.fillWidth: true; Layout.topMargin: Theme.spacing.small; spacing: Theme.spacing.small
+                LogosText { textFormat: Text.PlainText; text: "iCalendar"; color: root.cFaint; font.pixelSize: 11; Layout.alignment: Qt.AlignVCenter }
+                LogosButton { text: "Export .ics"; onClicked: { calSettingsPopup.close(); icsSaveDialog.open() } }
+                LogosButton { text: "Import .ics"; onClicked: { calSettingsPopup.close(); icsOpenDialog.open() } }
+                Item { Layout.fillWidth: true }
+            }
+            RowLayout {
+                Layout.fillWidth: true; Layout.topMargin: Theme.spacing.small; spacing: Theme.spacing.small
+                Item { Layout.fillWidth: true }
+                LogosButton { text: "Cancel"; onClicked: calSettingsPopup.close() }
+                LogosButton { text: "Save"; onClicked: root.saveCalSettings() }
+            }
+        }
+    }
+
+    // ── join popup ─────────────────────────────────────────────────────────
+    Popup {
+        id: joinPopup
+        anchors.centerIn: Overlay.overlay
+        width: 420; modal: true; padding: Theme.spacing.large
+        background: Rectangle { radius: 12; color: root.cSurface; border.width: 1; border.color: root.cSurface2 }
+        onOpened: { joinLink.text = ""; root.joinIdentity = ""; root.joinAppear = "ctx"; root.joinBusy = false; root.refreshHd() }
+        ColumnLayout {
+            anchors.fill: parent; spacing: Theme.spacing.small
+            LogosText { textFormat: Text.PlainText; text: "Join a shared calendar"; color: root.cText; font.pixelSize: 18; font.weight: Theme.typography.weightMedium }
+            LogosText { textFormat: Text.PlainText; text: "Paste the scala:// invite link"; color: root.cFaint; font.pixelSize: 12 }
+            Field { id: joinLink; Layout.fillWidth: true; placeholderText: "scala://join?..." }
+            LogosText { textFormat: Text.PlainText
+                visible: joinLink.text.indexOf("&inv=") >= 0
+                text: "This is an invite: you'll get the offered role under the identity you appear as. Calendars you already joined keep their identity."
+                color: root.cSub; font.pixelSize: 11; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+            AppearChooser {
+                visible: root.hd.exists; Layout.fillWidth: true; Layout.topMargin: Theme.spacing.small
+                sel: root.joinAppear; onPick: function (k) { root.joinAppear = k }
+            }
+            // Author as — which identity signs YOUR events on this calendar (owner stays the inviter).
+            LogosText { textFormat: Text.PlainText; text: "Author as"; color: root.cFaint; font.pixelSize: 11; Layout.topMargin: Theme.spacing.small
+                visible: !root.hd.exists || root.joinAppear === "other" }
+            Flow {
+                visible: !root.hd.exists || root.joinAppear === "other"
+                Layout.fillWidth: true; spacing: Theme.spacing.small
+                Repeater {
+                    model: root.identities
+                    Rectangle {
+                        radius: Theme.spacing.radiusSmall
+                        color: (root.joinIdentity === modelData.id || (root.joinIdentity === "" && modelData.id === root.defaultIdentityId)) ? root.cBlue : root.cSurface
+                        border.width: 1
+                        border.color: (root.joinIdentity === modelData.id || (root.joinIdentity === "" && modelData.id === root.defaultIdentityId)) ? root.cBlue : root.cSurface2
+                        implicitHeight: jChipT.implicitHeight + 10; implicitWidth: jChipT.implicitWidth + 22
+                        LogosText { textFormat: Text.PlainText; id: jChipT; anchors.centerIn: parent; text: modelData.label; font.pixelSize: 12; color: root.cText }
+                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.joinIdentity = modelData.id }
+                    }
+                }
+            }
+            RowLayout {
+                Layout.fillWidth: true; Layout.topMargin: Theme.spacing.small
+                Item { Layout.fillWidth: true }
+                LogosButton { text: "Cancel"; onClicked: joinPopup.close() }
+                LogosButton {
+                    text: "Join"; enabled: joinLink.text.trim().length > 0 && !root.joinBusy
+                    onClicked: {
+                        if (root.joinBusy) return
+                        root.joinBusy = true
+                        var link = joinLink.text.trim(), isInvite = link.indexOf("&inv=") >= 0
+                        joinPopup.close()
+                        root.coreAsync("handleShareLink", [link, root.appearArg(root.joinAppear, (root.joinIdentity || root.defaultIdentityId))], function (r) {
+                            root.joinBusy = false
+                            var ok = root.j(r, false) === true
+                            root.refresh()
+                            root.notify(!ok ? "Couldn't join — check the link."
+                                        : (isInvite ? "Calendar joined — your role arrives once the invite has synced." : "Calendar joined."), !ok)
+                        })
+                    }
+                }
+            }
+        }
+    }
+
+    // ── share popup (link + a real QR the phone can scan) ─────────────────────
+    property var qrData: null    // { n, cells } from core qrMatrix
+    property var shareCal: null  // the calendar being shared (for "add snapshot")
+    property bool shareIsInvite: false   // the popup shows an invite link (ADR 0022): no snapshot button
+    property int snapPolls: 0
+    function b64url(s) { return Qt.btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "") }
+    function setShareQr(link) {
+        var text = (typeof link === "string" ? link : "")
+        shareLink.text = text
+        root.qrData = null
+        qrCanvas.requestPaint()
+        if (text === "") return
+        root.coreAsync("qrMatrix", [text], function (r) {
+            if (shareLink.text !== text) return          // a newer link replaced this one
+            var m = root.j(r, null)
+            if (m && m.ok && m.n && m.cells && m.cells.length >= m.n * m.n) root.qrData = { n: m.n, cells: m.cells }
+            qrCanvas.requestPaint()
+        })
+    }
+    function openShare(cal) {
+        root.shareCal = cal
+        root.shareIsInvite = false
+        shareTitle.text = cal.name || "calendar"
+        shareStatus.text = ""
+        root.setShareQr("")
+        sharePopup.open()
+        root.coreAsync("generateShareLink", [cal.id], function (r) {
+            if (root.shareCal && root.shareCal.id === cal.id) root.setShareQr(root.j(r, ""))
+        })
+    }
+    // ADR 0020: write a snapshot of this calendar, then rebuild the invite with &snap=<pointer>&stor=<codex spr>
+    // so a joining phone bootstraps from Storage instead of a full-log sync. The CID arrives async → poll.
+    function shareWithSnapshot() {
+        if (!root.shareCal) return
+        shareStatus.text = "Creating snapshot…"
+        root.coreAsync("snapshotCalendar", [root.shareCal.id, "1000"], function (raw) {  // small epoch → just-seeded events are in a completed cut
+            var res = root.j(raw, null)
+            if (!res || res.ok === false) {
+                shareStatus.text = "Snapshot failed: " + ((res && res.error) ? res.error : "no response from the core")
+                return
+            }
+            shareStatus.text = res.status === "restarting storage"
+                ? "Restarting storage to announce the mesh address…"
+                : "Creating snapshot…"
+            root.snapPolls = 0
+            snapPollTimer.start()
+        })
+    }
+    Timer {
+        id: snapPollTimer; interval: 1200; repeat: true
+        property bool busy: false
+        onTriggered: {
+            if (busy || !root.shareCal) return
+            busy = true
+            root.snapPolls++
+            var calId = root.shareCal.id
+            root.coreAsync("getSnapshotPointer", [calId], function (raw) {
+                snapPollTimer.busy = false
+                var p = root.j(raw, null)
+                if (p && p.cid) {
+                    snapPollTimer.stop()
+                    root.coreAsync("getStorageSpr", [], function (r1) {
+                        var spr = root.j(r1, "")
+                        root.coreAsync("getStorageExtip", [], function (r2) {  // what the running node announces
+                            var ext = root.j(r2, "")
+                            root.coreAsync("generateShareLink", [calId], function (r3) {
+                                var base = root.j(r3, "")
+                                var link = base + "&snap=" + root.b64url(JSON.stringify(p)) + (spr ? "&stor=" + root.b64url(spr) : "")
+                                shareStatus.text = "Snapshot ready — " + (p.count || 0) + " events · "
+                                    + (ext ? "reachable at " + ext : "⚠ this device announces no address; a phone may not reach it")
+                                    + (spr ? "" : " · no SPR")
+                                if (root.shareCal && root.shareCal.id === calId) root.setShareQr(link)
+                            })
+                        })
+                    })
+                } else if (root.snapPolls > 75) {  // ~90 s: covers a storage restart before the upload
+                    snapPollTimer.stop(); shareStatus.text = "Snapshot timed out — is Logos Storage running?"
+                }
+            })
+        }
+    }
+    Popup {
+        id: sharePopup
+        anchors.centerIn: Overlay.overlay
+        width: 520; modal: true; padding: Theme.spacing.large
+        background: Rectangle { radius: 12; color: root.cSurface; border.width: 1; border.color: root.cSurface2 }
+        onOpened: qrCanvas.requestPaint()
+        ColumnLayout {
+            anchors.fill: parent; spacing: Theme.spacing.small
+            LogosText { textFormat: Text.PlainText; id: shareTitle; text: ""; color: root.cText; font.pixelSize: 18; font.weight: Theme.typography.weightMedium }
+            LogosText { textFormat: Text.PlainText; text: "Scan this on the phone, or copy the link:"; color: root.cFaint; font.pixelSize: 12 }
+            Rectangle {
+                Layout.alignment: Qt.AlignHCenter
+                width: 440; height: 440; radius: Theme.spacing.radiusSmall; color: "#ffffff"
+                visible: root.qrData !== null
+                Canvas {
+                    id: qrCanvas; anchors.fill: parent; anchors.margins: 12
+                    onPaint: {
+                        var ctx = getContext("2d"); ctx.reset()
+                        ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, width, height)
+                        var d = root.qrData; if (!d || !d.n) return
+                        var cell = width / d.n; ctx.fillStyle = "#000000"
+                        for (var y = 0; y < d.n; y++)
+                            for (var x = 0; x < d.n; x++)
+                                if (d.cells[y * d.n + x])
+                                    ctx.fillRect(Math.floor(x * cell), Math.floor(y * cell), Math.ceil(cell), Math.ceil(cell))
+                    }
+                }
+            }
+            Field { id: shareLink; Layout.fillWidth: true; readOnly: true; selectByMouse: true }
+            LogosText { textFormat: Text.PlainText; id: shareStatus; text: ""; visible: text !== ""; color: root.cFaint; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+            RowLayout {
+                Layout.fillWidth: true; Layout.topMargin: Theme.spacing.small
+                LogosButton { text: "＋ Snapshot"; visible: !root.shareIsInvite; onClicked: root.shareWithSnapshot() }
+                Item { Layout.fillWidth: true }
+                LogosButton { text: "Copy"; enabled: shareLink.text !== ""; onClicked: { shareLink.selectAll(); shareLink.copy(); shareLink.deselect(); root.notify("Link copied.", false) } }
+                LogosButton { text: "Close"; onClicked: sharePopup.close() }
+            }
+        }
+    }
+
+    // ── delete calendar (with confirm) ─────────────────────────────────────────
+    property var pendingDeleteCal: null
+    function confirmDeleteCalendar(cal) { pendingDeleteCal = cal; deletePopup.open() }
+    function deleteCalendar() {
+        if (!pendingDeleteCal) return
+        var id = pendingDeleteCal.id
+        root.coreAsync("deleteCalendar", [id], function () { root.refresh() })
+        if (filterCalId === id) filterCalId = ""
+        pendingDeleteCal = null
+        deletePopup.close()
+    }
+    Popup {
+        id: deletePopup
+        anchors.centerIn: Overlay.overlay
+        width: 380; modal: true; padding: Theme.spacing.large
+        background: Rectangle { radius: 12; color: root.cSurface; border.width: 1; border.color: root.cSurface2 }
+        ColumnLayout {
+            anchors.fill: parent; spacing: Theme.spacing.small
+            LogosText { textFormat: Text.PlainText; text: "Delete calendar?"; color: root.cText; font.pixelSize: 18; font.weight: Theme.typography.weightMedium }
+            LogosText { textFormat: Text.PlainText;
+                text: "Remove \"" + (root.pendingDeleteCal ? (root.pendingDeleteCal.name || "calendar") : "") + "\" from this device. Its local events are deleted. Peers who joined keep their own copy."
+                color: root.cFaint; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true
+            }
+            RowLayout {
+                Layout.fillWidth: true; Layout.topMargin: Theme.spacing.small
+                Item { Layout.fillWidth: true }
+                LogosButton { text: "Cancel"; onClicked: { root.pendingDeleteCal = null; deletePopup.close() } }
+                LogosButton { text: "Delete"; onClicked: root.deleteCalendar() }
+            }
+        }
+    }
+    // Confirm before deleting an event (destructive, and a recurring master takes the whole series).
+    Popup {
+        id: deleteEventPopup
+        anchors.centerIn: Overlay.overlay
+        width: 380; modal: true; padding: Theme.spacing.large
+        background: Rectangle { radius: 12; color: root.cSurface; border.width: 1; border.color: root.cSurface2 }
+        ColumnLayout {
+            anchors.fill: parent; spacing: Theme.spacing.small
+            LogosText { textFormat: Text.PlainText; text: "Delete event?"; color: root.cText; font.pixelSize: 18; font.weight: Theme.typography.weightMedium }
+            LogosText { textFormat: Text.PlainText;
+                text: "Delete \"" + (root.editingEvent ? (root.editingEvent.title || "(untitled)") : "")
+                    + "\"" + ((root.editingEvent && root.editingEvent.recur) ? " and its whole repeating series" : "")
+                    + ". This can't be undone."
+                color: root.cFaint; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true
+            }
+            RowLayout {
+                Layout.fillWidth: true; Layout.topMargin: Theme.spacing.small
+                Item { Layout.fillWidth: true }
+                LogosButton { text: "Cancel"; onClicked: deleteEventPopup.close() }
+                LogosButton { text: "Delete"; onClicked: root.doDeleteEvent() }
+            }
+        }
+    }
+
+    // ── diagnostics popup (connection + events) ──────────────────────────────
+    property var diag: null
+    function loadDiag() { root.coreAsync("diagnostics", [], function (r) { root.diag = root.j(r, null) }) }
+    function openDiag() { root.loadDiag(); diagPopup.open() }
+    Popup {
+        id: diagPopup
+        anchors.centerIn: Overlay.overlay
+        width: 460; height: 460; modal: true; padding: Theme.spacing.large
+        background: Rectangle { radius: 12; color: root.cSurface; border.width: 1; border.color: root.cSurface2 }
+        onOpened: root.loadDiag()
+        ColumnLayout {
+            anchors.fill: parent; spacing: Theme.spacing.small
+            LogosText { textFormat: Text.PlainText; text: "Diagnostics"; color: root.cText; font.pixelSize: 18; font.weight: Theme.typography.weightMedium }
+
+            RowLayout {
+                Layout.fillWidth: true; spacing: Theme.spacing.medium
+                Rectangle { width: 10; height: 10; radius: 5; color: (root.diag && root.diag.nodeReady) ? root.cGreen : root.cYellow; Layout.alignment: Qt.AlignVCenter }
+                LogosText { textFormat: Text.PlainText; text: (root.diag && root.diag.nodeReady) ? "Delivery node connected" : "Node not ready"; color: root.cText; font.pixelSize: 14 }
+                Item { Layout.fillWidth: true }
+                LogosButton { text: "Refresh"; onClicked: root.loadDiag() }
+            }
+            LogosText { textFormat: Text.PlainText;
+                text: root.diag ? ("delivery: " + (root.diag.deliveryStatus || "(none)") + "   ·   context ready: " + (root.diag.ctxReady ? "yes" : "NO")) : "—"
+                color: root.cSub; font.pixelSize: 12
+            }
+            LogosText { textFormat: Text.PlainText;
+                text: root.diag ? (root.diag.calendarCount + " calendar(s) · " + root.diag.eventCount + " event(s) total") : "—"
+                color: root.cSub; font.pixelSize: 12
+            }
+            LogosText { textFormat: Text.PlainText;
+                text: root.diag ? ("data: " + (root.diag.dataDir || "?")) : ""
+                color: root.cFaint; font.pixelSize: 11; elide: Text.ElideMiddle; Layout.fillWidth: true
+            }
+            LogosText { textFormat: Text.PlainText; text: "Your identity (share this to be added to a calendar)"; color: root.cFaint; font.pixelSize: 11 }
+            RowLayout {
+                Layout.fillWidth: true; spacing: Theme.spacing.small
+                Field { id: diagIdField; text: root.diag ? (root.diag.identity || root.myIdentity || "(none)") : root.myIdentity; Layout.fillWidth: true; readOnly: true; selectByMouse: true }
+                LogosButton { text: "Copy"; onClicked: { diagIdField.selectAll(); diagIdField.copy() } }
+            }
+
+            LogosText { textFormat: Text.PlainText; text: "Per-calendar sync"; color: root.cFaint; font.pixelSize: 11; Layout.topMargin: Theme.spacing.small }
+            ListView {
+                Layout.fillWidth: true; Layout.fillHeight: true; clip: true
+                model: (root.diag && root.diag.calendars) ? root.diag.calendars : []
+                spacing: 4
+                delegate: Rectangle {
+                    width: ListView.view.width; height: 40; radius: Theme.spacing.radiusSmall; color: root.cMantle
+                    RowLayout {
+                        anchors.fill: parent; anchors.leftMargin: Theme.spacing.small; anchors.rightMargin: Theme.spacing.small; spacing: Theme.spacing.small
+                        Rectangle { width: 8; height: 8; radius: 4; color: modelData.syncing ? root.cGreen : root.cFaint }
+                        LogosText { textFormat: Text.PlainText; text: modelData.name || modelData.id; color: root.cText; font.pixelSize: 13; Layout.fillWidth: true; elide: Text.ElideRight }
+                        LogosText { textFormat: Text.PlainText; text: (modelData.events || 0) + " ev"; color: root.cFaint; font.pixelSize: 12 }
+                        LogosText { textFormat: Text.PlainText; text: modelData.shared ? (modelData.syncing ? "syncing" : "offline") : "local"; color: modelData.syncing ? root.cGreen : root.cFaint; font.pixelSize: 12 }
+                    }
+                }
+            }
+            RowLayout { Layout.fillWidth: true; Item { Layout.fillWidth: true } LogosButton { text: "Close"; onClicked: diagPopup.close() } }
+        }
+    }
+
+    // ── Keycard overlay (scala ADR 0016) — shown while a card tap is pending, or on failure ──────
+    Popup {
+        id: keycardOverlay
+        anchors.centerIn: Overlay.overlay
+        width: 420; modal: true; closePolicy: Popup.NoAutoClose; padding: Theme.spacing.large
+        background: Rectangle { radius: 12; color: root.cSurface; border.width: 1; border.color: root.cSurface2 }
+        readonly property bool failed: root.kc && root.kc.phase === "failed"
+        readonly property bool enrolling: root.kc && root.kc.purpose === "enroll"
+        ColumnLayout {
+            width: parent.width; spacing: Theme.spacing.medium
+            LogosText { textFormat: Text.PlainText;
+                text: keycardOverlay.failed ? "⚠️  Keycard error"
+                      : (keycardOverlay.enrolling ? "💳  Enrolling your Keycard" : "💳  Sign with your Keycard")
+                color: root.cText; font.pixelSize: 18; font.weight: Theme.typography.weightMedium
+            }
+            // A tiny rotating arc while pending (no BusyIndicator dependency).
+            Rectangle {
+                visible: !keycardOverlay.failed
+                Layout.alignment: Qt.AlignHCenter
+                width: 34; height: 34; radius: 17; color: "transparent"
+                border.width: 3; border.color: root.cBlue
+                Rectangle { width: 8; height: 8; radius: 4; color: root.cSurface; anchors.top: parent.top; anchors.horizontalCenter: parent.horizontalCenter; anchors.topMargin: -1 }
+                RotationAnimation on rotation { from: 0; to: 360; duration: 1000; loops: Animation.Infinite; running: keycardOverlay.visible && !keycardOverlay.failed }
+            }
+            LogosText { textFormat: Text.PlainText;
+                Layout.fillWidth: true; wrapMode: Text.WordWrap; horizontalAlignment: Text.AlignHCenter
+                text: keycardOverlay.failed ? (root.kc.error || "The Keycard operation failed.")
+                      : "Hold your Keycard to the reader and approve the request in the Keycard UI (enter your PIN there)."
+                color: keycardOverlay.failed ? root.cRed : root.cFaint; font.pixelSize: 13
+            }
+            RowLayout {
+                Layout.fillWidth: true; Layout.topMargin: Theme.spacing.small
+                Item { Layout.fillWidth: true }
+                LogosButton {
+                    text: keycardOverlay.failed ? "Close" : "Cancel"
+                    onClicked: { keycardOverlay.close(); if (root.kc && root.kc.ref) root.kcLastRef = root.kc.ref }
+                }
+            }
+        }
     }
 }

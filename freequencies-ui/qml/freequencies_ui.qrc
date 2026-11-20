@@ -1,0 +1,7 @@
+<RCC>
+    <qresource prefix="/freequencies">
+        <file>FreequenciesView.qml</file>
+        <file>Field.qml</file>
+        <file>templates.js</file>
+    </qresource>
+</RCC>
