@@ -56,3 +56,27 @@ and Android 0.3.0 (vc3) on [freequencies.vpavlin.xyz](https://freequencies.vpavl
 | Analytics (events per month, attendance, revenue) | ⬜ | |
 | Integrations: tickets, weather, venue maps | ⬜ | |
 | Public copy of a night for attendees, kept in step automatically ([ADR 0008](adr/0008-public-copy-of-a-night.md)) | 🧪 | desktop `freequencies_ui` 0.5.0 (needs `scala` 0.12.4) + Android 0.5.0 in testing |
+
+## 5. Track A on the desktop: Freequencies rebuilt on Scala's app ([ADR 0009](adr/0009-desktop-on-scala-and-track-a-data.md))
+
+`freequencies_ui` 0.7.0 is a fork of Scala's own view, built one issue at a time
+([docs/issues](issues/README.md)). 🧪 = built and checked in the offscreen preview and by Node tests,
+not yet on real Basecamp (issue #29); none counts as done until Android reads it too (issue #28).
+
+| Plan item | Issue | Desktop |
+|---|---|---|
+| Freequencies look (Bebas Neue + FT88 Serif, acid green, ruled grid) | #3 #4 | 🧪 |
+| Month / week / day (Scala's), board, timeline | #6 #9 #23 | 🧪 |
+| Drag & drop (grid, week, board lanes) | #7 #9 | 🧪 |
+| Colour by status / type / venue / calendar; status badges | #6 #8 | 🧪 |
+| Night panel: status, venue, type, notes, repeats, duplicate | #8 #22 | 🧪 |
+| Line-up from Kith; crew and check-in | #10 #11 | 🧪 (data as Android 0.5) |
+| Tags; tickets; poster; files members-only / community | #12–#15 | 🧪 |
+| Tasks with deadlines; gear; budget; social planner | #16–#19 | 🧪 |
+| WhisperBox forms; public copy (golden-tested against Android) | #20 #21 | 🧪 |
+| Search and filters; clash warnings | #24 #25 | 🧪 |
+| Venues; analytics | #26 #27 | 🧪 |
+| Android readers for the new kinds | #28 | ⬜ |
+| Test pass on real Basecamp | #29 | ⬜ |
+| Not planned yet: weather, availability polling, push notifications, ticketing API | — | ⬜ |
+

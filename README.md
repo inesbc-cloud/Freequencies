@@ -30,6 +30,12 @@ needs, built in the Scala repo so every Scala user gets them too.
 
 Dual-licensed under [MIT](LICENSE-MIT) or [Apache 2.0](LICENSE-APACHE), at your option.
 
+## Desktop app
+
+`freequencies-ui/` is a fork of Scala's calendar view grown into Freequencies, one issue at a time
+([docs/issues](docs/issues/README.md), [ADR 0009](docs/adr/0009-desktop-on-scala-and-track-a-data.md)).
+How to preview and test it: [freequencies-ui/README.md](freequencies-ui/README.md).
+
 ## Docs
 
 - [Demo script](docs/demo.md): a six-minute walkthrough on the shared demo calendar.

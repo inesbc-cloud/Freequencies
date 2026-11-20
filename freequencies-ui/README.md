@@ -19,7 +19,7 @@ Nights are Scala events; Freequencies data rides in Scala's `ext` items (ADRs 00
 ## Check your change
 
 ```sh
-node freequencies-ui/test/run.mjs                      # logic
+node --experimental-strip-types freequencies-ui/test/run.mjs   # logic (+ golden test against Android's publish.ts)
 pip install PySide6                                    # once
 python3 freequencies-ui/qml-harness/preview/preview.py freequencies-ui/qml/FreequenciesView.qml shots ""
 ```
