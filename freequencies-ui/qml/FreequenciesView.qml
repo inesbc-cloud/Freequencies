@@ -345,6 +345,7 @@ Item {
     // The night that's open (#8 shows it in the right pane; until then, Scala's editor opens it).
     property var selectedNight: null
     function openNight(occ) { root.selectedNight = occ; root.openEditEvent(occ) }
+    readonly property var dragProxyItem: dragProxy        // night cards drag with Scala's proxy (#7)
     // Occurrences on a day, from the cached month expansion (month cells).
     function nightsOnDay(d) {
         var out = [], occ = root.monthOccurrences
@@ -1081,6 +1082,12 @@ Item {
                             }
                         }
                         MouseArea { anchors.fill: parent; z: -1; onClicked: root.selectedDay = modelData }
+                        // Freequencies (#7): drop a night on a week column to move it there.
+                        DropArea {
+                            anchors.fill: parent
+                            Rectangle { anchors.fill: parent; color: "transparent"; border.width: 2; border.color: root.cLime; visible: parent.containsDrag }
+                            onDropped: function (drop) { if (drop.source && drop.source.dragEv) root.moveEventToDay(drop.source.dragEv, modelData) }
+                        }
                     }
                 }
             }
