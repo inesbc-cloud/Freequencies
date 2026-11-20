@@ -46,6 +46,8 @@
         <file>fq/lib/checklist.js</file>
         <file>fq/sections/ChecklistSection.qml</file>
         <file>fq/popups/ItemPopup.qml</file>
+        <file>fq/lib/money.js</file>
+        <file>fq/sections/BudgetSection.qml</file>
         <file>fonts/BebasNeue-Regular.ttf</file>
     </qresource>
 </RCC>

@@ -86,6 +86,7 @@ Rectangle {
                 TicketsSection { app: panel.app; night: panel.night; canEdit: panel.canEdit; onEditTickets: ticketsPopup.openFor() }
                 PosterSection { app: panel.app; night: panel.night; canEdit: panel.canEdit; onChange: posterPopup.openFor() }
                 FilesSection { app: panel.app; night: panel.night; canEdit: panel.canEdit; onUpload: fileDialog.open() }
+                BudgetSection { app: panel.app; night: panel.night; canEdit: panel.canEdit; onEditLine: function (l) { itemPopup.openFor("budget", l) } }
                 CrewSection { app: panel.app; night: panel.night; canEdit: panel.canEdit; onEditCrew: function (c) { crewPopup.openFor(c) } }
                 ChecklistSection {
                     app: panel.app; night: panel.night; canEdit: panel.canEdit
