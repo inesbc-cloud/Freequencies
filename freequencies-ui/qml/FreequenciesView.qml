@@ -24,7 +24,11 @@ import Logos.Theme
 import Logos.Controls
 import "fq"   // Freequencies: tokens, components, sections, views (one file each)
 import "fq/views"
+import "fq/popups"
 import "fq/lib/nights.js" as Nights
+import "fq/lib/details.js" as Details
+import "fq/lib/funding.js" as Funding
+import "fq/lib/production.js" as Production
 import "fq/lib/colour.js" as Colour
 import "fq/lib/ext.js" as Ext
 import "fq/lib/tags.js" as Tags
@@ -206,7 +210,9 @@ Item {
 
     // ── state ────────────────────────────────────────────────────────────────
     property var calendars: []          // [{id,name,color,encryptionKey,...}]
-    property var events: []             // flat list across all calendars
+    property var events: []             // flat list across all calendars (Funding calendars excluded)
+    property var fundingCals: []        // calendars holding the funding library (fq/lib/funding.js)
+    property var fundingEvents: []
     property date viewMonth: new Date()   // any date in the shown month
     property date selectedDay: new Date()
     property string filterCalId: ""      // "" = all calendars (single-focus filter)
@@ -313,6 +319,14 @@ Item {
                 // Deferred apply: reassigning these models rebuilds the calendar/event Repeaters;
                 // deferring keeps that off any in-flight signal handler's stack.
                 Qt.callLater(function () {
+                    // Funding calendars hold the funding library, not nights: kept apart from every
+                    // calendar list and view, shown only in the Funding tab.
+                    var fc = cals.filter(function (c) { return Funding.isFundingCal(c) }), fid = {}
+                    for (var fi = 0; fi < fc.length; fi++) fid[fc[fi].id] = true
+                    root.fundingCals = fc
+                    root.fundingEvents = evs.filter(function (e) { return !!fid[e.calendarId] })
+                    cals = cals.filter(function (c) { return !fid[c.id] })
+                    evs = evs.filter(function (e) { return !fid[e.calendarId] })
                     root.calendars = cals; root.calAddr = ca; root.events = evs
                     root.refreshBusy = false
                     if (root.refreshAgain) { root.refreshAgain = false; root.refresh() }
@@ -412,14 +426,64 @@ Item {
     }
     // One value per night (tags, tickets, poster; ADR 0009): post a fresh item, then retire my older
     // ones of that kind (and, with same(), only those that match: e.g. one file's flag).
-    function putLatest(night, kind, data, okMsg, same) {
+    function putLatest(night, kind, data, okMsg, same, cb) {
         if (!night) return
-        var cal = root.calById(night.calendarId), me = cal ? cal.authorAddr : ""
+        var cal = root.calById(night.calendarId) || (root.fundingCal && root.fundingCal.id === night.calendarId ? root.fundingCal : null)
+        var me = cal ? cal.authorAddr : ""
         var old = Ext.extOf(night, kind).filter(function (x) { return x.author === me && (!same || same(Ext.dataOf(x))) })
         root.postItem(night, Ext.item(kind, night.id, data, Ext.freshId(kind, night.id)), okMsg, function (ok) {
             if (ok) for (var i = 0; i < old.length; i++) root.coreAsync("deleteExt", [night.calendarId, old[i].id], function () {})
+            if (cb) cb(ok)
         })
     }
+
+    // ── Production (fq/lib/production.js, fq/views/ProductionView.qml) ──
+    property string prodNightId: ""
+    readonly property var prodNight: root.prodNightId ? root.eventById(root.prodNightId) : null
+    property bool planBusy: false
+    // Start a plan from a format: the plan item, then the template's rows (one ext item each).
+    function createPlan(night, format) {
+        var s = Production.seedPlan(format)
+        if (!night || !s || root.planBusy) return
+        root.planBusy = true
+        root.putLatest(night, "prod-plan", s.plan, "", null, function (ok) {
+            if (!ok) { root.planBusy = false; return }
+            var left = s.rows.length
+            if (!left) { root.planBusy = false; root.notify("Plan ready"); return }
+            for (var i = 0; i < s.rows.length; i++) {
+                var r = s.rows[i], id = Production.newRowId(r.table)
+                var it = Ext.item("prod-row", night.id, Production.rowData(r.table, id, r.order, r.cells), "prod-row:" + Ext.rnd())
+                root.coreAsync("postExt", [night.calendarId, JSON.stringify(it)], function () {
+                    if (--left === 0) { root.planBusy = false; root.notify("Plan ready: " + Production.FORMATS[format].label); root.refresh() }
+                })
+            }
+        })
+    }
+    function setPlan(night, plan, okMsg) { root.putLatest(night, "prod-plan", plan, okMsg || "Saved") }
+    // Save a row (new when r is null): a new version; my own older versions of it are retired.
+    function saveRow(night, table, r, cells, cb) {
+        var plan = Production.planOf(night), def = Production.tableDef(plan, table)
+        var c = Production.cleanCells(def, cells)
+        if (c.error) { root.notify(c.error, true); return }
+        var rowId = r ? r.row : Production.newRowId(table)
+        var order = r ? r.order : (Production.rowsOf(night, table).length + 1) * 10
+        root.putLatest(night, "prod-row", Production.rowData(table, rowId, order, c.cells), r ? "Saved" : "Added",
+                       function (d) { return d.row === rowId }, cb)
+    }
+    function deleteRow(night, r, cb) {
+        root.putLatest(night, "prod-row", Production.deletedRow(r), "Removed", function (d) { return d.row === r.row }, cb)
+    }
+
+    // ── sections of the app: home · calendar (month/week/…/venues/analytics/funding) · production ──
+    property string section: "home"
+    function showCalendar(mode) { root.section = "calendar"; if (mode) root.calMode = mode }
+    function openOccurrence(occ) {
+        if (!occ) return
+        root.section = "calendar"
+        var d = new Date(occ.startTime); root.selectedDay = d; root.viewMonth = d
+        root.openNight(occ)
+    }
+    function openProduction(night) { root.prodNightId = night ? (night.seriesId || night.id) : root.prodNightId; root.section = "production" }
     readonly property var freqNights: { var ids = {}; for (var i = 0; i < root.freqCals.length; i++) ids[root.freqCals[i].id] = true
                                         return root.events.filter(function (e) { return !!ids[e.calendarId] }) }
     readonly property var allTags: Tags.allTags(root.freqNights)
@@ -566,6 +630,93 @@ Item {
             if (res && res.ok && res.link) root.copyText(String(res.link)); else root.notify("Couldn't make a link" + (res && res.error ? ": " + res.error : "."), true)
         })
     }
+    // ── quick new night: name, date, venue, times, line-up (+ optional details) ──
+    // The form lives in fq/popups/NewNightPopup.qml; the full Scala editor stays one click away.
+    function openQuickNight() {
+        var w = root.freqCals.filter(function (c) { return root.canAddTo(c) })
+        if (w.length === 0) { root.openNewEvent(); return }   // no Freequencies calendar yet: Scala's editor
+        quickNight.openFor(w, root.selectedDay)
+    }
+    property bool quickBusy: false
+    function createQuickNight(calId, form, cb) {
+        var r = Details.quickNight(form)
+        if (r.error) { root.notify(r.error, true); return }
+        if (root.quickBusy) return
+        root.quickBusy = true
+        root.coreAsync("createEvent", [calId, JSON.stringify(r.event)], function (res) {
+            var id = root.unq(res) || String(root.j(res, "") || "")
+            if (!id) { root.quickBusy = false; root.notify("Couldn't add the night. You may not be able to add to this calendar.", true); return }
+            root.lastCalId = calId
+            var left = r.items.length
+            function done() {
+                root.quickBusy = false
+                root.notify("Added “" + r.event.title + "” on " + Qt.formatDate(new Date(r.event.startTime), "ddd d MMM"))
+                root.refresh()
+                var d = new Date(r.event.startTime); root.selectedDay = d; root.viewMonth = d
+                root.selectedNight = { id: id, seriesId: id, occ: r.event.startTime, calendarId: calId, startTime: r.event.startTime, endTime: r.event.endTime }
+                if (root.section !== "production") root.section = "calendar"
+                if (cb) cb(true)
+            }
+            if (!left) { done(); return }
+            for (var i = 0; i < r.items.length; i++) {
+                var k = r.items[i].kind
+                var it = Ext.item(k, id, r.items[i].data, k === "details" ? Ext.freshId("details", id) : k + ":" + Ext.rnd())
+                root.coreAsync("postExt", [calId, JSON.stringify(it)], function () { if (--left === 0) done() })
+            }
+        })
+    }
+    // A night's optional details (one "details" item, newest wins): fq/sections/DetailsSection.qml.
+    function saveDetails(night, form, cb) {
+        var r = Details.detailsData(form)
+        if (r.error) { root.notify(r.error, true); return }
+        root.putLatest(night, "details", r.data, "Saved")
+        if (cb) cb(true)
+    }
+
+    // ── funding library (fq/lib/funding.js, fq/views/FundingView.qml) ──
+    readonly property var fundingCal: root.fundingCals.length ? root.fundingCals[0] : null
+    readonly property var fundingAnchor: root.fundingCal ? Funding.anchorOf(root.fundingEvents, root.fundingCal.id) : null
+    property bool fundingBusy: false
+    // Make the shared Funding calendar (collaborative, so every member can add documents) and its anchor.
+    function setupFunding() {
+        if (root.fundingBusy) return
+        root.fundingBusy = true
+        function anchor(calId) {
+            root.coreAsync("createEvent", [calId, JSON.stringify(Funding.anchorEvent())], function () {
+                root.fundingBusy = false; root.notify("Funding library ready. Share it with your collective from the Funding tab."); root.refresh()
+            })
+        }
+        if (root.fundingCal) { anchor(root.fundingCal.id); return }   // calendar there, anchor missing
+        root.coreAsync("createCalendar", ["Funding library", "#c6ff00", ""], function (r) {
+            var id = root.unq(r) || String(root.j(r, "") || "")
+            if (!id) { root.fundingBusy = false; root.notify("Couldn't create the funding library.", true); return }
+            var meta = { schema: Funding.fundingSchema([]), open: true, collab: true, description: "Freequencies funding library: winning applications and links to funding." }
+            root.coreAsync("updateCalendarMeta", [id, JSON.stringify(meta)], function () { anchor(id) })
+        })
+    }
+    function postFunding(item, okMsg, cb) {
+        var a = root.fundingAnchor
+        if (!a) { root.notify("Set up the funding library first.", true); return }
+        item.target = a.id
+        root.postItem(a, item, okMsg, cb)
+    }
+    function deleteFunding(id, okMsg, cb) { if (root.fundingAnchor) root.deleteItem(root.fundingAnchor, id, okMsg, cb) }
+    // Upload a document onto the anchor (Logos Storage, sealed with the library's key). When it lands,
+    // it's added to the anchor's attachments and handed to the open application form.
+    property var fundUploaded: []          // [{cid, name}] since the form opened
+    function uploadToFunding(fileUrl) {
+        var a = root.fundingAnchor
+        if (!a || root.attachBusy) return
+        var path = decodeURIComponent(("" + fileUrl).replace(/^file:\/\//, "")), name = path.split("/").pop()
+        root.attachNightId = a.id
+        root.attachBusy = true; root.attachDiag = ""; root.attachMsg = "Sealing + uploading " + name + "…"
+        root.coreAsync("uploadAttachment", [a.calendarId, path, name, ""], function (r) {
+            var ref = root.unq(r)
+            if (!ref) { root.attachBusy = false; root.attachMsg = "Upload failed to start"; return }
+            root.attachPollRef = ref; root.attachPollMode = "upload-fund"; attachPoll.restart()
+        })
+    }
+
     function kithName(b) {
         if (b.contact) for (var i = 0; i < root.kithArtists.length; i++) if (root.kithArtists[i].id === b.contact) return root.kithArtists[i].name
         return b.name
@@ -1018,16 +1169,37 @@ Item {
     Header {
         id: fqHeader
         overdue: Checklist.overdueCount(root.freqNights, root.nowTick)
-        // overviews (#26, #27): beside the calendar modes, so the mode switch stays short
-        FqButton { text: "Venues"; primary: root.calMode === "venues"; onClicked: root.calMode = "venues" }
-        FqButton { text: "Analytics"; primary: root.calMode === "stats"; onClicked: root.calMode = "stats" }
+        // the app's sections: one row of tabs, the calendar's own modes stay inside Calendar
+        readonly property bool inCal: root.section === "calendar" && ["venues", "stats", "funding"].indexOf(root.calMode) < 0
+        FqButton { objectName: "tabHome"; text: "Home"; primary: root.section === "home"; onClicked: root.section = "home" }
+        FqButton { text: "Calendar"; primary: fqHeader.inCal; onClicked: root.showCalendar(["venues", "stats", "funding"].indexOf(root.calMode) >= 0 ? "month" : "") }
+        FqButton { objectName: "tabProduction"; text: "Production"; primary: root.section === "production"; onClicked: root.openProduction(null) }
+        FqButton { text: "Funding"; primary: root.section === "calendar" && root.calMode === "funding"; onClicked: root.showCalendar("funding") }
+        FqButton { text: "Venues"; primary: root.section === "calendar" && root.calMode === "venues"; onClicked: root.showCalendar("venues") }
+        FqButton { text: "Analytics"; primary: root.section === "calendar" && root.calMode === "stats"; onClicked: root.showCalendar("stats") }
         Link { text: "debug"; tone: Fq.faint; onClicked: root.openDiag() }
-        FqButton { text: "+ Night"; primary: true; onClicked: root.openNewEvent() }
+        FqButton { text: "+ Night"; primary: true; onClicked: root.openQuickNight() }
         anchors.top: soonBanner.bottom; anchors.left: parent.left; anchors.right: parent.right
     }
+    // The quick new-night form (name, date, venue, times, line-up; more details optional).
+    property alias dlgQuickNight: quickNight
+    NewNightPopup { id: quickNight; app: root }
 
     // 3 resizable panes: calendars | month | agenda. Drag the dividers to resize.
+    // Home and Production: full-width pages over the calendar's panes.
+    HomeView {
+        id: homeView
+        visible: root.section === "home"; app: root
+        anchors.top: fqHeader.bottom; anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
+    }
+    ProductionView {
+        id: productionView
+        visible: root.section === "production"; app: root
+        anchors.top: fqHeader.bottom; anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
+    }
+
     SplitView {
+        visible: root.section === "calendar"
         anchors.top: fqHeader.bottom; anchors.left: parent.left
         anchors.right: parent.right; anchors.bottom: parent.bottom
         orientation: Qt.Horizontal
@@ -1194,6 +1366,7 @@ Item {
                         : root.calMode === "timeline" ? "Timeline"
                         : root.calMode === "venues" ? "Venues"
                         : root.calMode === "stats" ? "Analytics"
+                        : root.calMode === "funding" ? "Funding"
                         : root.calMode === "day" ? Qt.formatDate(root.selectedDay, "dddd, MMMM d")
                         : root.monthNames[root.viewMonth.getMonth()] + " " + root.viewMonth.getFullYear()).toUpperCase()
                     color: root.cText; font.pixelSize: 34
@@ -1230,8 +1403,8 @@ Item {
                 // Freequencies (#24): Debug and + Night live in the app header, so the grid gets the width.
             }
 
-            ColourBar { app: root; visible: root.calMode !== "venues" && root.calMode !== "stats"; Layout.fillWidth: true; Layout.leftMargin: Theme.spacing.medium; Layout.rightMargin: Theme.spacing.medium }
-            FilterBar { app: root; Layout.fillWidth: true; Layout.leftMargin: Theme.spacing.medium; Layout.rightMargin: Theme.spacing.medium; Layout.bottomMargin: 6 }
+            ColourBar { app: root; visible: root.calMode !== "venues" && root.calMode !== "stats" && root.calMode !== "funding"; Layout.fillWidth: true; Layout.leftMargin: Theme.spacing.medium; Layout.rightMargin: Theme.spacing.medium }
+            FilterBar { app: root; visible: root.calMode !== "funding"; Layout.fillWidth: true; Layout.leftMargin: Theme.spacing.medium; Layout.rightMargin: Theme.spacing.medium; Layout.bottomMargin: 6 }
 
             RowLayout {
                 visible: root.calMode === "month"
@@ -1383,6 +1556,13 @@ Item {
             }
             AnalyticsView {
                 visible: root.calMode === "stats"; app: root
+                Layout.fillWidth: true; Layout.fillHeight: true
+                Layout.leftMargin: Theme.spacing.medium; Layout.rightMargin: Theme.spacing.medium; Layout.bottomMargin: Theme.spacing.medium
+            }
+            // ── funding library: winning applications and links to funding ──
+            FundingView {
+                id: fundingView
+                visible: root.calMode === "funding"; app: root
                 Layout.fillWidth: true; Layout.fillHeight: true
                 Layout.leftMargin: Theme.spacing.medium; Layout.rightMargin: Theme.spacing.medium; Layout.bottomMargin: Theme.spacing.medium
             }
@@ -1749,6 +1929,11 @@ Item {
             var night = root.eventById(root.attachNightId), ref = { name: r.name, mime: r.mime, size: r.size, storageCid: r.cid, blobId: r.blobId }
             root.attachMsg = ""
             if (night) root.editNight(night, function (up) { up.attachments = (Array.isArray(up.attachments) ? up.attachments : []).concat([ref]) }, "Attached " + r.name)
+        } else if (root.attachPollMode === "upload-fund") {  // funding library: onto the anchor, then into the form
+            var fref = { name: r.name, mime: r.mime, size: r.size, storageCid: r.cid, blobId: r.blobId }
+            root.attachMsg = ""
+            root.fundUploaded = root.fundUploaded.concat([{ cid: r.cid, name: r.name }])
+            if (root.fundingAnchor) root.editNight(root.fundingAnchor, function (up) { up.attachments = (Array.isArray(up.attachments) ? up.attachments : []).concat([fref]) }, "Uploaded " + r.name)
         } else if (root.attachPollMode === "upload") {
             var a = root.evAttachments.slice()
             a.push({ name: r.name, mime: r.mime, size: r.size, storageCid: r.cid, blobId: r.blobId })

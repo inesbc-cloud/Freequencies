@@ -76,6 +76,10 @@ not yet on real Basecamp (issue #29); none counts as done until Android reads it
 | WhisperBox forms; public copy (golden-tested against Android) | #20 #21 | 🧪 |
 | Search and filters; clash warnings | #24 #25 | 🧪 |
 | Venues; analytics | #26 #27 | 🧪 |
+| Quick new night (name, date, venue, times, line-up; optional kind, audience, tickets, age, access, link) and a Details section; ext kind `details` | — | 🧪 |
+| Sections: Home (what needs you) · Calendar · Production · Funding · Venues · Analytics ([ADR 0010](adr/0010-promoters-workspace.md)) | — | 🧪 |
+| Production: plan per night by format (8 promoter formats, T-minus timeline, team, venue & ops, hospitality, suppliers, run of show, risks, debrief, custom modules; the night's line-up/crew/budget/tickets/posts/gear as modules), after Louisa Prog's INTERSECT production office; ext kinds `prod-plan` / `prod-row` | — | 🧪 |
+| Funding library: winning applications with documents, links to funders and open calls; its own "Funding library" calendar (marker field `fq_funding`, one anchor event), ext kinds `fund-app` / `fund-link` | — | 🧪 |
 | Android readers for the new kinds | #28 | ⬜ |
 | Test pass on real Basecamp | #29 | ⬜ |
 | Not planned yet: weather, availability polling, push notifications, ticketing API | — | ⬜ |

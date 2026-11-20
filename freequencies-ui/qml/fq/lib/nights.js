@@ -3,7 +3,9 @@
 // calendars carry them. Pure functions, no Qt: unit-tested in Node (freequencies-ui/test).
 
 var statuses = ["Hold", "Confirmed", "Cancelled"]
-var types = ["Club night", "Concert", "Residency", "Other"]
+// Kinds of event. New ones go before "Other"; a calendar adopted earlier keeps its own option list,
+// and a night may still carry any of these as its type.
+var types = ["Club night", "Concert", "Residency", "Live set", "Workshop", "Talk", "Screening", "Community", "Festival", "Other"]
 var freqFields = [
     { key: "status", label: "Status", type: "enum", options: statuses },
     { key: "venue", label: "Venue", type: "text" },

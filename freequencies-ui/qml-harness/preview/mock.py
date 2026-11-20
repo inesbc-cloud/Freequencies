@@ -126,6 +126,11 @@ class Bridge(QObject):
                 for i, e in enumerate(EVENTS):
                     if e["id"] == a[1] or e["id"] == a[0]: EVENTS.pop(i); return True
                 return False
+            if method == "createCalendar":
+                cid = "cal-" + rid()
+                CALS.append({"id": cid, "name": a[0], "color": a[1] or "#6ef600", "owner": ME, "authorAddr": ME, "roles": {}, "schema": [],
+                             "encryptionKey": "k", "open": True, "collab": False})
+                return cid
             if method == "listCalendars": return CALS
             if method == "listAllEvents": return EVENTS
             if method == "getEvent":

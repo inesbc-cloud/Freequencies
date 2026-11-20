@@ -11,3 +11,4 @@
 | [0007](0007-crew-on-the-night.md) | The crew of a night: roles and call times on the night, people from Kith | accepted; scope vs 0001 to confirm |
 | [0008](0008-public-copy-of-a-night.md) | A public copy of a night, kept in step automatically | accepted (PoC) |
 | [0009](0009-desktop-on-scala-and-track-a-data.md) | The desktop app is a fork of Scala's view; Track A data rides on ext items | proposed |
+| [0010](0010-promoters-workspace.md) | Freequencies is a promoters' workspace; the calendar is one section of it | proposed |
