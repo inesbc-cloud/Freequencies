@@ -59,6 +59,13 @@ Rectangle {
                 }
             }
 
+            Image {   // the poster (#15)
+                readonly property string src: panel.app.posterSrc(panel.night)
+                visible: src !== "" && status === Image.Ready
+                source: src; asynchronous: true; fillMode: Image.PreserveAspectFit; sourceSize.width: 800
+                Layout.fillWidth: true; Layout.preferredHeight: visible ? Math.min(420, col.width * implicitHeight / Math.max(1, implicitWidth)) : 0
+            }
+
             ColumnLayout {
                 id: sections
                 objectName: "nightSections"
@@ -76,6 +83,7 @@ Rectangle {
                 TagsSection { app: panel.app; night: panel.night; canEdit: panel.canEdit }
                 LineupSection { app: panel.app; night: panel.night; canEdit: panel.canEdit; onEditArtist: function (b) { artistPopup.openFor(b) } }
                 TicketsSection { app: panel.app; night: panel.night; canEdit: panel.canEdit; onEditTickets: ticketsPopup.openFor() }
+                PosterSection { app: panel.app; night: panel.night; canEdit: panel.canEdit; onChange: posterPopup.openFor() }
                 FilesSection { app: panel.app; night: panel.night; canEdit: panel.canEdit; onUpload: fileDialog.open() }
                 CrewSection { app: panel.app; night: panel.night; canEdit: panel.canEdit; onEditCrew: function (c) { crewPopup.openFor(c) } }
                 NotesSection { app: panel.app; night: panel.night; canEdit: panel.canEdit }
@@ -90,5 +98,7 @@ Rectangle {
     CrewPopup { id: crewPopup; app: panel.app; night: panel.night }
     property alias dlgTickets: ticketsPopup
     TicketsPopup { id: ticketsPopup; app: panel.app; night: panel.night }
+    property alias dlgPoster: posterPopup
+    PosterPopup { id: posterPopup; app: panel.app; night: panel.night }
     FileDialog { id: fileDialog; title: "Attach a file to this night"; onAccepted: panel.app.uploadToNight(panel.night, fileDialog.selectedFile) }
 }

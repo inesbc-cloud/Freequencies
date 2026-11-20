@@ -26,10 +26,17 @@ Rectangle {
         FText { text: (nc.clash ? "⚠ " : "") + (nc.occ ? (nc.occ.title || "(untitled)") : ""); color: nc.clash ? Fq.warn : Fq.text; font.pixelSize: 12
                 font.strikeout: nc.status === "Cancelled" }
     }
+    Image {   // poster thumbnail (#15) on full cards wide enough for it
+        id: thumb
+        readonly property string src: nc.compact ? "" : nc.app.posterSrc(nc.app.eventById(nc.occ ? nc.occ.seriesId : ""))
+        visible: src !== "" && status === Image.Ready && nc.width >= 160
+        source: src; asynchronous: true; fillMode: Image.PreserveAspectCrop; sourceSize.width: 80
+        width: visible ? 34 : 0; height: 42; x: parent.width - width - 4; anchors.verticalCenter: parent.verticalCenter
+    }
     Column {
         id: col
         visible: !nc.compact
-        x: 10; width: parent.width - 14; anchors.verticalCenter: parent.verticalCenter; spacing: 1
+        x: 10; width: parent.width - 14 - thumb.width; anchors.verticalCenter: parent.verticalCenter; spacing: 1
         FText { width: parent.width; elide: Text.ElideRight; wrapMode: Text.Wrap; maximumLineCount: 2; font.pixelSize: 13
                 text: nc.occ ? (nc.occ.title || "(untitled)") : ""; font.strikeout: nc.status === "Cancelled" }
         FText { width: parent.width; elide: Text.ElideRight; font.pixelSize: 12; color: nc.clash ? Fq.warn : Fq.sub

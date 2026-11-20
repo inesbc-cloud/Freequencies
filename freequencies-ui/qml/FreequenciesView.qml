@@ -28,6 +28,7 @@ import "fq/lib/nights.js" as Nights
 import "fq/lib/colour.js" as Colour
 import "fq/lib/ext.js" as Ext
 import "fq/lib/tags.js" as Tags
+import "fq/lib/poster.js" as Poster
 
 Item {
     id: root
@@ -1516,6 +1517,34 @@ Item {
             root.attachPollRef = ref; root.attachPollMode = "upload-night"; attachPoll.restart()
         })
     }
+    // Freequencies (#15): posters stored as attachments are fetched once (when no transfer is running)
+    // and then shown from the local copy.
+    property var posterPaths: ({})          // cid -> local path
+    property var posterQueue: []            // [{calId, cid, name}]
+    property string posterCid: ""
+    function posterSrc(night) {
+        var s = Poster.sourceOf(night)
+        if (!s) return ""
+        if (s.src) return s.src
+        if (root.posterPaths[s.cid]) return "file://" + root.posterPaths[s.cid]
+        if (!root.posterQueue.some(function (q) { return q.cid === s.cid }) && root.posterCid !== s.cid)
+            Qt.callLater(function () { root.posterQueue = root.posterQueue.concat([{ calId: night.calendarId, cid: s.cid, name: s.name }]) })
+        return ""
+    }
+    Timer {
+        interval: 1500; repeat: true; running: root.posterQueue.length > 0
+        onTriggered: {
+            if (root.attachBusy) return
+            var q = root.posterQueue[0]; root.posterQueue = root.posterQueue.slice(1)
+            if (root.posterPaths[q.cid]) return
+            root.attachBusy = true; root.posterCid = q.cid
+            root.coreAsync("downloadAttachment", [q.calId, q.cid, q.name], function (r) {
+                var ref = root.unq(r)
+                if (!ref) { root.attachBusy = false; root.posterCid = ""; return }
+                root.attachPollRef = ref; root.attachPollMode = "poster"; attachPoll.restart()
+            })
+        }
+    }
     function openAttachment(calId, cid, name) {
         if (!cid) { root.attachMsg = "Not uploaded yet"; return }
         root.attachBusy = true; root.attachDiag = ""; root.attachMsg = "Fetching " + (name || cid) + "…"
@@ -1544,6 +1573,10 @@ Item {
         }
         root.attachDiag = ""; root.attachProgress = -1
         attachPoll.stop(); root.attachBusy = false
+        if (root.attachPollMode === "poster") {           // Freequencies (#15): keep the poster, open nothing
+            if (r.ok && r.path) { var m = {}; for (var k in root.posterPaths) m[k] = root.posterPaths[k]; m[root.posterCid] = r.path; root.posterPaths = m }
+            root.posterCid = ""; return
+        }
         if (!r.ok) { root.attachMsg = "Failed: " + (r.error || "unknown"); return }
         if (root.attachPollMode === "upload-night") {      // Freequencies (#14): add it to the night
             var night = root.eventById(root.attachNightId), ref = { name: r.name, mime: r.mime, size: r.size, storageCid: r.cid, blobId: r.blobId }

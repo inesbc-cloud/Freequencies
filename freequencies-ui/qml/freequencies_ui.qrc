@@ -40,6 +40,9 @@
         <file>fq/popups/TicketsPopup.qml</file>
         <file>fq/lib/files.js</file>
         <file>fq/sections/FilesSection.qml</file>
+        <file>fq/lib/poster.js</file>
+        <file>fq/sections/PosterSection.qml</file>
+        <file>fq/popups/PosterPopup.qml</file>
         <file>fonts/BebasNeue-Regular.ttf</file>
     </qresource>
 </RCC>

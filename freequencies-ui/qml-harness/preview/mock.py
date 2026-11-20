@@ -158,8 +158,14 @@ class Bridge(QObject):
                     e["ext"] = [x for x in e.get("ext", []) if x["id"] != a[1]]
                     if len(e["ext"]) != n: return {"ok": True}
                 return {"ok": False}
-            if method == "uploadAttachment": return "ref1"
-            if method == "attachmentStatus": return {"ok": True, "cid": "zNEW" + rid(), "name": "file.pdf", "mime": "application/pdf", "size": 1000, "blobId": "b9"}
+            if method == "uploadAttachment": return "up:" + os.path.basename(a[1])
+            if method == "downloadAttachment": return "dl:" + a[1]
+            if method == "attachmentStatus":
+                ref = a[0]
+                if ref.startswith("dl:"):   # a download: posters map to the seeded images next to this file
+                    p = os.path.join(HERE, "poster-02.png" if "poster" in ref else "poster-01.png")
+                    return {"ok": True, "path": p}
+                return {"ok": True, "cid": "zNEW" + rid(), "name": ref[3:] or "file.pdf", "mime": "application/pdf", "size": 1000, "blobId": "b9"}
             if method == "createInvite": return {"ok": True, "link": "scala://join?x"}
             return ""
         if module == "loam_core":
