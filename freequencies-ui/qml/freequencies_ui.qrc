@@ -22,6 +22,8 @@
         <file>fq/NightPanel.qml</file>
         <file>fq/sections/QuickFields.qml</file>
         <file>fq/sections/NotesSection.qml</file>
+        <file>fq/lib/lanes.js</file>
+        <file>fq/views/BoardView.qml</file>
         <file>fonts/BebasNeue-Regular.ttf</file>
     </qresource>
 </RCC>

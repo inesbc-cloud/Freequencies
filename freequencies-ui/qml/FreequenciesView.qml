@@ -23,6 +23,7 @@ import QtQuick.Dialogs
 import Logos.Theme
 import Logos.Controls
 import "fq"   // Freequencies: tokens, components, sections, views (one file each)
+import "fq/views"
 import "fq/lib/nights.js" as Nights
 import "fq/lib/colour.js" as Colour
 
@@ -379,6 +380,25 @@ Item {
     }
     function setNightField(night, key, value) { root.editNight(night, function (up) { up.fields[key] = value }, "Saved") }
     readonly property var dragProxyItem: dragProxy        // night cards drag with Scala's proxy (#7)
+    // ── the board (#9) ──
+    property string laneBy: "venue"                       // "venue" | "status" | "calendar"
+    function boardLabel(d) {
+        var a = new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() + 6) % 7)), b = new Date(a.getFullYear(), a.getMonth(), a.getDate() + 13)
+        return Qt.formatDate(a, "d MMM") + " – " + Qt.formatDate(b, "d MMM yyyy")
+    }
+    // Dropped on the board: move to that day (time of day kept) and, for venue / status lanes, set it.
+    function moveNightTo(occ, day, by, laneId) {
+        var night = root.eventById(occ.seriesId || occ.id)
+        if (!night) return
+        if (!root.canEditNight(night)) { root.notify("You can't move nights on this calendar.", true); return }
+        var setField = (by === "venue" || by === "status") && laneId !== "—" && laneId !== Nights.fieldOf(night, by)
+        if (by === "calendar" && laneId !== night.calendarId) root.notify("Nights can't move between calendars: duplicate it there instead.", true)
+        if (!setField) { root.moveEventToDay(occ, day); return }
+        var s = new Date(occ.startTime), ns = new Date(day.getFullYear(), day.getMonth(), day.getDate(), s.getHours(), s.getMinutes(), 0, 0)
+        var shift = ns.getTime() - occ.startTime
+        root.editNight(night, function (up) { up.startTime += shift; up.endTime = (up.endTime || up.startTime) + shift; up.fields[by] = laneId },
+                       "Moved to " + Qt.formatDate(ns, "ddd d MMM") + " · " + laneId)
+    }
     // Occurrences on a day, from the cached month expansion (month cells).
     function nightsOnDay(d) {
         var out = [], occ = root.monthOccurrences
@@ -648,12 +668,12 @@ Item {
         return a.getDate() + " " + mo[a.getMonth()] + " – " + b.getDate() + " " + mo[b.getMonth()] + " " + b.getFullYear()
     }
     function goPrev() {
-        if (calMode === "week") { var d = new Date(selectedDay.getFullYear(), selectedDay.getMonth(), selectedDay.getDate() - 7); selectedDay = d; viewMonth = d }
+        if (calMode === "week" || calMode === "board") { var d = new Date(selectedDay.getFullYear(), selectedDay.getMonth(), selectedDay.getDate() - 7); selectedDay = d; viewMonth = d }
         else if (calMode === "day") { var dd = new Date(selectedDay.getFullYear(), selectedDay.getMonth(), selectedDay.getDate() - 1); selectedDay = dd; viewMonth = dd }
         else viewMonth = new Date(viewMonth.getFullYear(), viewMonth.getMonth() - 1, 1)
     }
     function goNext() {
-        if (calMode === "week") { var d = new Date(selectedDay.getFullYear(), selectedDay.getMonth(), selectedDay.getDate() + 7); selectedDay = d; viewMonth = d }
+        if (calMode === "week" || calMode === "board") { var d = new Date(selectedDay.getFullYear(), selectedDay.getMonth(), selectedDay.getDate() + 7); selectedDay = d; viewMonth = d }
         else if (calMode === "day") { var dd = new Date(selectedDay.getFullYear(), selectedDay.getMonth(), selectedDay.getDate() + 1); selectedDay = dd; viewMonth = dd }
         else viewMonth = new Date(viewMonth.getFullYear(), viewMonth.getMonth() + 1, 1)
     }
@@ -950,6 +970,7 @@ Item {
                 }
                 DText {
                     text: (root.calMode === "week" ? root.weekLabel(root.selectedDay)
+                        : root.calMode === "board" ? root.boardLabel(root.selectedDay)
                         : root.calMode === "day" ? Qt.formatDate(root.selectedDay, "dddd, MMMM d")
                         : root.monthNames[root.viewMonth.getMonth()] + " " + root.viewMonth.getFullYear()).toUpperCase()
                     color: root.cText; font.pixelSize: 34
@@ -962,7 +983,7 @@ Item {
                     Row {
                         id: modeRow; anchors.centerIn: parent; spacing: 2
                         Repeater {
-                            model: [{ m: "month", t: "Month" }, { m: "week", t: "Week" }, { m: "day", t: "Day" }]
+                            model: [{ m: "month", t: "Month" }, { m: "week", t: "Week" }, { m: "day", t: "Day" }, { m: "board", t: "Board" }]   // Freequencies: + board (#9)
                             Rectangle {
                                 width: segT.implicitWidth + 18; height: 26; radius: 0
                                 color: root.calMode === modelData.m ? root.cBlue : "transparent"
@@ -1123,6 +1144,14 @@ Item {
                         }
                     }
                 }
+            }
+
+            // ── Freequencies board (#9): lanes by venue / status / calendar ──
+            BoardView {
+                visible: root.calMode === "board"
+                app: root
+                Layout.fillWidth: true; Layout.fillHeight: true
+                Layout.leftMargin: Theme.spacing.medium; Layout.rightMargin: Theme.spacing.medium; Layout.bottomMargin: Theme.spacing.medium
             }
 
             // ── day timeline: all-day band + hour-bucketed schedule for the selected day ──
