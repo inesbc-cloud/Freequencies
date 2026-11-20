@@ -13,6 +13,7 @@ TextField {
     selectionColor: Fq.lime
     selectedTextColor: Fq.ink
     font.pixelSize: 14
+    font.family: Fq.body
     selectByMouse: true
     background: Rectangle {
         color: Fq.mantle

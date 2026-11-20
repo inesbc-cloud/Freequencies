@@ -342,9 +342,42 @@ Item {
         return out.sort()
     }
     readonly property var legend: Colour.legend(root.colorBy, root.fqPalette, root.venuesInUse, root.freqCals, root.calColor)
-    // The night that's open (#8 shows it in the right pane; until then, Scala's editor opens it).
-    property var selectedNight: null
-    function openNight(occ) { root.selectedNight = occ; root.openEditEvent(occ) }
+    // ── the open night (#8): shown in the right pane by fq/NightPanel.qml ─────────
+    property var selectedNight: null      // the clicked occurrence
+    // Its master event from the latest refresh (so the panel shows fresh data; null if it's gone).
+    readonly property var selNight: root.selectedNight ? root.eventById(root.selectedNight.seriesId || root.selectedNight.id) : null
+    // Nights open in the panel; events of other calendars in Scala's editor, as in Scala.
+    function openNight(occ) {
+        if (occ && Nights.isFreqCal(root.calById(occ.calendarId))) root.selectedNight = occ
+        else root.openEditEvent(occ)
+    }
+    // ── Freequencies writes ─────────────────────────────────────────────────────
+    // Scala replaces a whole event on every edit (last write wins per event), so a change is made on
+    // the freshest copy, fetched right before saving: what someone else changed since our last
+    // refresh is kept, not overwritten with our older copy.
+    property bool nightSaving: false
+    function editNight(night, mutate, okMsg) {
+        if (!night || root.nightSaving) return
+        root.nightSaving = true
+        root.coreAsync("getEvent", [night.id], function (raw) {
+            var fresh = root.j(raw, null)
+            if (!fresh || typeof fresh !== "object" || fresh.id !== night.id) {
+                root.nightSaving = false
+                root.notify("Couldn't load the night to change it. It may have been deleted.", true); root.refresh(); return
+            }
+            var up = JSON.parse(JSON.stringify(fresh))
+            delete up.seriesId; delete up.occ; delete up.ext; delete up.rsvps
+            if (!up.calendarId) up.calendarId = night.calendarId
+            up.fields = (up.fields && typeof up.fields === "object") ? up.fields : {}
+            mutate(up)
+            root.coreAsync("updateEvent", [JSON.stringify(up)], function (r) {
+                root.nightSaving = false
+                if (root.unq(r) === night.id || String(root.j(r, "")) === night.id) { if (okMsg) root.notify(okMsg); root.refresh() }
+                else root.notify("Couldn't save the change. You may not have edit rights on this calendar.", true)
+            })
+        })
+    }
+    function setNightField(night, key, value) { root.editNight(night, function (up) { up.fields[key] = value }, "Saved") }
     readonly property var dragProxyItem: dragProxy        // night cards drag with Scala's proxy (#7)
     // Occurrences on a day, from the cached month expansion (month cells).
     function nightsOnDay(d) {
@@ -964,7 +997,7 @@ Item {
                 }
             }
 
-            ColourBar { app: root; Layout.fillWidth: true; Layout.leftMargin: Theme.spacing.medium; Layout.rightMargin: Theme.spacing.medium }
+            ColourBar { app: root; Layout.fillWidth: true; Layout.leftMargin: Theme.spacing.medium; Layout.rightMargin: Theme.spacing.medium; Layout.bottomMargin: 6 }
 
             RowLayout {
                 visible: root.calMode === "month"
@@ -1112,7 +1145,7 @@ Item {
                                 Rectangle { width: 3; height: 16; radius: 0; color: root.evColor(modelData); anchors.verticalCenter: parent.verticalCenter }
                                 FText { text: root.clashMark(modelData) + root.rsvpMark(modelData) + (modelData.title || "(untitled)"); color: root.myRsvpOf(modelData) === "no" ? root.cSub : root.cText; font.strikeout: root.myRsvpOf(modelData) === "no"; font.pixelSize: 12; anchors.verticalCenter: parent.verticalCenter }
                             }
-                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.openEditEvent(modelData) }
+                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.openNight(modelData) }
                         }
                     }
                 }
@@ -1147,7 +1180,7 @@ Item {
                                                 FText { text: root.clashMark(modelData) + root.rsvpMark(modelData) + (modelData.title || "(untitled)"); color: root.myRsvpOf(modelData) === "no" ? root.cSub : root.cText; font.strikeout: root.myRsvpOf(modelData) === "no"; font.pixelSize: 14; font.weight: Theme.typography.weightMedium; elide: Text.ElideRight; width: parent.width }
                                                 FText { text: root.fmtTime(modelData.startTime) + " – " + root.fmtTime(modelData.endTime) + (modelData.location ? " · " + modelData.location : ""); color: root.cSub; font.pixelSize: 12; elide: Text.ElideRight; width: parent.width }
                                             }
-                                            MouseArea { id: evMA2; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.openEditEvent(modelData) }
+                                            MouseArea { id: evMA2; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.openNight(modelData) }
                                         }
                                     }
                                 }
@@ -1159,11 +1192,12 @@ Item {
             }
         }
 
-        // ── pane 3: agenda (resizable) ─────────────────────────────────────
+        // ── pane 3: agenda (resizable); the open night covers it (Freequencies #8) ──
         Rectangle {
-            SplitView.preferredWidth: 320
-            SplitView.minimumWidth: 220
+            SplitView.preferredWidth: 400
+            SplitView.minimumWidth: 300
             color: root.cMantle
+            NightPanel { app: root; anchors.fill: parent; z: 10; visible: root.selNight !== null }
             ColumnLayout {
                 anchors.fill: parent
                 anchors.margins: Theme.spacing.medium
@@ -1267,7 +1301,7 @@ Item {
                                 }
                                 onReleased: function (m) {
                                     if (dragging) { dragProxy.Drag.drop(); dragProxy.visible = false; dragProxy.dragEv = null; dragging = false }
-                                    else root.openEditEvent(modelData)
+                                    else root.openNight(modelData)
                                 }
                             }
                         }

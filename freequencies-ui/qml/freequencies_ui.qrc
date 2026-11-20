@@ -15,6 +15,13 @@
         <file>fq/lib/colour.js</file>
         <file>fq/NightCard.qml</file>
         <file>fq/ColourBar.qml</file>
+        <file>fq/Sec.qml</file>
+        <file>fq/Chip.qml</file>
+        <file>fq/Badge.qml</file>
+        <file>fq/Link.qml</file>
+        <file>fq/NightPanel.qml</file>
+        <file>fq/sections/QuickFields.qml</file>
+        <file>fq/sections/NotesSection.qml</file>
         <file>fonts/BebasNeue-Regular.ttf</file>
     </qresource>
 </RCC>
