@@ -32,6 +32,7 @@ import "fq/lib/poster.js" as Poster
 import "fq/lib/checklist.js" as Checklist
 import "fq/lib/forms.js" as Forms
 import "fq/lib/publiccopy.js" as Pub
+import "fq/lib/duplicate.js" as Dup
 import "templates.js" as Tpl
 
 Item {
@@ -531,6 +532,30 @@ Item {
             var id = root.unq(r) || String(root.j(r, "") || "")
             if (!id) { root.notify("Couldn't create the calendar.", true); cb(""); return }
             root.coreAsync("updateCalendarMeta", [id, JSON.stringify({ open: false, description: "What's on. Published from Freequencies." })], function () { cb(id) })
+        })
+    }
+    // ── duplicate a night (#22): next week, as a Hold; opens the copy ─────────
+    property bool dupBusy: false
+    function duplicateNight(night) {
+        if (!night || root.dupBusy) return
+        var c = Dup.copyOf(night)
+        root.dupBusy = true
+        root.coreAsync("createEvent", [night.calendarId, JSON.stringify(c.event)], function (r) {
+            var id = root.unq(r) || String(root.j(r, "") || "")
+            if (!id) { root.dupBusy = false; root.notify("Couldn't duplicate the night.", true); return }
+            var left = c.items.length
+            function done() {
+                root.dupBusy = false
+                root.notify("Duplicated to " + Qt.formatDate(new Date(c.event.startTime), "ddd d MMM") + " as a Hold")
+                root.refresh()
+                var d = new Date(c.event.startTime); root.selectedDay = d; root.viewMonth = d
+                root.selectedNight = { id: id, seriesId: id, occ: c.event.startTime, calendarId: night.calendarId, startTime: c.event.startTime, endTime: c.event.endTime }
+            }
+            if (!left) { done(); return }
+            for (var i = 0; i < c.items.length; i++) {
+                var it = Ext.item(c.items[i].kind, id, c.items[i].data, c.items[i].kind === "tags" ? Ext.freshId("tags", id) : "")
+                root.coreAsync("postExt", [night.calendarId, JSON.stringify(it)], function () { if (--left === 0) done() })
+            }
         })
     }
     function copyInvite(calId, role) {

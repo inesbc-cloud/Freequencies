@@ -55,6 +55,8 @@
         <file>fq/lib/publiccopy.js</file>
         <file>fq/sections/PublicSection.qml</file>
         <file>fq/popups/PublicPopup.qml</file>
+        <file>fq/lib/duplicate.js</file>
+        <file>fq/sections/RepeatSection.qml</file>
         <file>fonts/BebasNeue-Regular.ttf</file>
     </qresource>
 </RCC>

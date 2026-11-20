@@ -75,12 +75,14 @@ Rectangle {
                 RowLayout {
                     Layout.fillWidth: true; Layout.topMargin: 8; spacing: 8
                     FqButton { text: "Edit details"; onClicked: panel.app.openEditEvent(panel.occ) }
+                    FqButton { text: panel.app.dupBusy ? "Copying…" : "Duplicate"; enabled: panel.canEdit && !panel.app.dupBusy; onClicked: panel.app.duplicateNight(panel.night) }
                     Item { Layout.fillWidth: true }
                 }
                 FText { visible: !!panel.night && !panel.canEdit; Layout.fillWidth: true; Layout.topMargin: 8; wrapMode: Text.Wrap; color: Fq.warn; font.pixelSize: 12
                     text: "Read-only: you're a " + Nights.roleOf(panel.cal) + " on this calendar." }
 
                 QuickFields { app: panel.app; night: panel.night; canEdit: panel.canEdit }
+                RepeatSection { app: panel.app; night: panel.night; canEdit: panel.canEdit }
                 TagsSection { app: panel.app; night: panel.night; canEdit: panel.canEdit }
                 LineupSection { app: panel.app; night: panel.night; canEdit: panel.canEdit; onEditArtist: function (b) { artistPopup.openFor(b) } }
                 TicketsSection { app: panel.app; night: panel.night; canEdit: panel.canEdit; onEditTickets: ticketsPopup.openFor() }
