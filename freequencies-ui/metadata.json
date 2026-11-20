@@ -9,7 +9,8 @@
   "view": "qml/FreequenciesView.qml",
   "dependencies": [
     "scala",
-    "loam_core"
+    "loam_core",
+    "kith"
   ],
   "nix": {
     "packages": {

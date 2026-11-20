@@ -11,3 +11,5 @@ Chip 1.0 Chip.qml
 Badge 1.0 Badge.qml
 Link 1.0 Link.qml
 NightPanel 1.0 NightPanel.qml
+Win 1.0 Win.qml
+Label_ 1.0 Label_.qml

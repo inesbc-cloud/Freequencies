@@ -5,9 +5,11 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import "lib/nights.js" as Nights
 import "sections"
+import "popups"
 
 Rectangle {
     id: panel
+    objectName: "nightPanel"
     property var app                                   // FreequenciesView root
     readonly property var occ: app.selectedNight        // the occurrence that was clicked
     readonly property var night: app.selNight           // its master event, fresh from the last refresh
@@ -70,8 +72,13 @@ Rectangle {
                     text: "Read-only: you're a " + Nights.roleOf(panel.cal) + " on this calendar." }
 
                 QuickFields { app: panel.app; night: panel.night; canEdit: panel.canEdit }
+                LineupSection { app: panel.app; night: panel.night; canEdit: panel.canEdit; onEditArtist: function (b) { artistPopup.openFor(b) } }
                 NotesSection { app: panel.app; night: panel.night; canEdit: panel.canEdit }
             }
         }
     }
+
+    // dialogs opened by the sections (aliased so the preview can drive them)
+    property alias dlgArtist: artistPopup
+    ArtistPopup { id: artistPopup; app: panel.app; night: panel.night }
 }

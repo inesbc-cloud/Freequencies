@@ -24,6 +24,12 @@
         <file>fq/sections/NotesSection.qml</file>
         <file>fq/lib/lanes.js</file>
         <file>fq/views/BoardView.qml</file>
+        <file>fq/Win.qml</file>
+        <file>fq/Label_.qml</file>
+        <file>fq/lib/ext.js</file>
+        <file>fq/lib/lineup.js</file>
+        <file>fq/sections/LineupSection.qml</file>
+        <file>fq/popups/ArtistPopup.qml</file>
         <file>fonts/BebasNeue-Regular.ttf</file>
     </qresource>
 </RCC>

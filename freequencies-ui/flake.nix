@@ -8,9 +8,11 @@
     scala.url = "github:vpavlin/scala/ef7b1ffbb64ffe013717cbe2b4e65f22f4fa5ae6";
     # Scala's view (and so this fork) calls loam_core directly for identities and keycard enrolment.
     loam_core.url = "github:vpavlin/loam-basecamp/f66ad0ac8973a314f17eca12e4ce0b9939b1a19a?dir=core";
+    # Artists and crew come from Kith's books through the kith core (ADR 0004); kith 0.3.1.
+    kith.url = "github:vpavlin/kith/d338a7852374bcdba40a32dcec8f399d20b078c5";
   };
 
-  outputs = inputs@{ logos-module-builder, scala, loam_core, ... }:
+  outputs = inputs@{ logos-module-builder, scala, loam_core, kith, ... }:
     logos-module-builder.lib.mkLogosQmlModule {
       src = ./.;
       configFile = ./metadata.json;

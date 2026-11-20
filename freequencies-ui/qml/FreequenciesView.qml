@@ -379,6 +379,56 @@ Item {
         })
     }
     function setNightField(night, key, value) { root.editNight(night, function (up) { up.fields[key] = value }, "Saved") }
+    // Post / delete one ext item on a night (Scala's postExt / deleteExt, core 0.12.0+). cb(ok).
+    property bool extBusy: false
+    function postItem(night, item, okMsg, cb) {
+        if (!night || root.extBusy) return
+        root.extBusy = true
+        root.coreAsync("postExt", [night.calendarId, JSON.stringify(item)], function (r) {
+            root.extBusy = false
+            var res = root.j(r, {}), ok = !!(res && res.ok)
+            if (ok) { if (okMsg) root.notify(okMsg); root.refresh() }
+            else root.notify("Couldn't save" + (res && res.error ? ": " + res.error : ". Only the person who added it can change it, and the ‘scala’ package must be 0.12.0+."), true)
+            if (cb) cb(ok, res)
+        })
+    }
+    function deleteItem(night, id, okMsg, cb) {
+        if (!night || !id) return
+        root.coreAsync("deleteExt", [night.calendarId, id], function (r) {
+            var res = root.j(r, {}), ok = !!(res && res.ok)
+            if (ok) { if (okMsg) root.notify(okMsg); root.refresh() } else root.notify("Couldn't remove it. Only the person who added it, or an editor, can.", true)
+            if (cb) cb(ok)
+        })
+    }
+    function bookingColor(st) { return st === "confirmed" ? Fq.confirmed : st === "cancelled" ? Fq.cancelled : Fq.hold }
+    // ── Kith (the `kith` core module, ADR 0004): every book's contacts, read when a picker opens ──
+    property var kithArtists: []             // [{bookId, id, name}]
+    property string kithState: ""            // "" | "loading" | "ok" | "none" | "missing"
+    function loadKith() {
+        if (root.kithState === "loading") return
+        root.kithState = "loading"
+        root.callVia("kith", "listBooks", [], function (rb) {
+            var books = root.j(rb, null)
+            if (!Array.isArray(books)) { root.kithState = "missing"; return }
+            if (books.length === 0) { root.kithArtists = []; root.kithState = "none"; return }
+            var acc = [], left = books.length
+            for (var i = 0; i < books.length; i++) (function (book) {
+                var bid = String((book && book.id) || "")
+                root.callVia("kith", "listContacts", [bid], function (rc) {
+                    var cs = root.j(rc, [])
+                    if (Array.isArray(cs)) for (var k = 0; k < cs.length; k++) {
+                        var c = cs[k], nm = (c && c.name && typeof c.name === "object" && typeof c.name.display === "string") ? c.name.display.trim() : ""
+                        if (nm && c.id) acc.push({ bookId: bid, id: String(c.id), name: nm })
+                    }
+                    if (--left === 0) { acc.sort(function (a, b) { return a.name.localeCompare(b.name) }); root.kithArtists = acc; root.kithState = "ok" }
+                })
+            })(books[i])
+        })
+    }
+    function kithName(b) {
+        if (b.contact) for (var i = 0; i < root.kithArtists.length; i++) if (root.kithArtists[i].id === b.contact) return root.kithArtists[i].name
+        return b.name
+    }
     readonly property var dragProxyItem: dragProxy        // night cards drag with Scala's proxy (#7)
     // ── the board (#9) ──
     property string laneBy: "venue"                       // "venue" | "status" | "calendar"

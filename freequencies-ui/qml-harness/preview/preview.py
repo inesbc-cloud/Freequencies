@@ -5,7 +5,8 @@
 
 Each argument after the output folder is a step: a JS statement run on the view's root (then a
 screenshot), "?expr" prints a value, "@name.prop=v" sets a property on the item with that objectName,
-"!drag" drags with the mouse. NOT the real design system (stubs/): use it for "renders, no errors,
+"%name: js" runs js in that item's own context (so ids inside its file are in scope),
+"!drag" drags with the mouse, "!click x,y" clicks. NOT the real design system (stubs/): use it for "renders, no errors,
 right pieces", and check widths/overflow on real Basecamp (docs/issues/29-basecamp-test-pass.md).
 Drop poster-01.png / poster-02.png next to this file to see posters in the seeded nights.
 """
@@ -38,7 +39,24 @@ def main():
     pump(1500)
     root = view.rootObject()
     for i, sc in enumerate(scenarios):
-        if sc.startswith("!drag"):
+        if sc.startswith("!click"):
+            from PySide6.QtTest import QTest
+            from PySide6.QtCore import Qt, QPoint
+            x, y = [int(v) for v in sc[6:].split(",")]
+            QTest.mouseClick(view, Qt.LeftButton, Qt.NoModifier, QPoint(x, y)); pump(700); continue
+        if sc.startswith("%"):
+            # "%objName: js" runs js in that item's own QML context (its ids are in scope)
+            from PySide6.QtQml import QQmlEngine
+            from PySide6.QtCore import QObject as _Q
+            name, js = sc[1:].split(":", 1)
+            obj = root.findChild(_Q, name.strip())
+            if obj is None: print("NO OBJECT", name); continue
+            ex = QQmlExpression(QQmlEngine.contextForObject(obj), obj, js.strip()); v = ex.evaluate()
+            if ex.hasError(): print("SCENARIO ERROR:", sc, ex.error().toString())
+            elif v is not None and js.strip().startswith("?"): pass
+            pump(900)
+            if js.strip().endswith(";?"): print("EVAL", v); continue
+        elif sc.startswith("!drag"):
             from PySide6.QtTest import QTest
             from PySide6.QtCore import Qt, QPoint
             x1, y1, x2, y2 = [int(v) for v in sc[5:].split(",")]
