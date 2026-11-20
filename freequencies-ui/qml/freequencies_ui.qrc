@@ -8,5 +8,8 @@
         <file>fq/FqButton.qml</file>
         <file>fq/Header.qml</file>
         <file>fq/dish.png</file>
+        <file>fq/FText.qml</file>
+        <file>fq/DText.qml</file>
+        <file>fonts/BebasNeue-Regular.ttf</file>
     </qresource>
 </RCC>

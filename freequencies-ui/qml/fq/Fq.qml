@@ -1,4 +1,4 @@
-// Freequencies design tokens (the site + posters): one place for colours (and, from #4, fonts),
+// Freequencies design tokens (the site + posters): one place for colours and fonts,
 // shared by the view and every file in fq/. Scala's own colour names in FreequenciesView.qml
 // (cBase, cBlue, …) point here, so Scala's code keeps working unchanged.
 pragma Singleton
@@ -30,4 +30,11 @@ QtObject {
     readonly property color cancelled: red
     // categorical swatch: calendars, venues, types
     readonly property var swatch: ["#6ef600", "#4aa8ff", "#ff6ad5", "#ffc531", "#3fe0d0", "#b98cff", "#ff8a3d", "#7bf686"]
+
+    // fonts (#4): Bebas Neue for display (bundled, OFL); FT88 Serif for everything else
+    // (Velvetyne, OFL: drop it in qml/fonts/FT88-Serif.otf, see the README there; monospace until then)
+    property FontLoader bebasLoader: FontLoader { source: "../fonts/BebasNeue-Regular.ttf" }
+    property FontLoader ft88Loader: FontLoader { source: "../fonts/FT88-Serif.otf" }
+    readonly property string display: bebasLoader.status === FontLoader.Ready ? bebasLoader.font.family : "Impact"
+    readonly property string body: ft88Loader.status === FontLoader.Ready ? ft88Loader.font.family : "monospace"
 }

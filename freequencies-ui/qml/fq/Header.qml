@@ -1,7 +1,6 @@
 // Freequencies header: dish mark, wordmark, and the faint CRT scanlines of the site's hero.
 import QtQuick
 import QtQuick.Layouts
-import Logos.Controls
 
 Rectangle {
     id: hdr
@@ -18,8 +17,8 @@ Rectangle {
         Image { source: "dish.png"; Layout.preferredWidth: 40; Layout.preferredHeight: 40; fillMode: Image.PreserveAspectFit; smooth: false }
         ColumnLayout {
             spacing: -6
-            LogosText { textFormat: Text.PlainText; text: "FREEQUENCIES"; color: Fq.lime; font.pixelSize: 34; font.bold: true }
-            LogosText { textFormat: Text.PlainText; text: "( coordination tool · lisboa )"; color: Fq.sub; font.pixelSize: 12; font.letterSpacing: 1 }
+            DText { text: "FREEQUENCIES"; color: Fq.lime; font.pixelSize: 40 }
+            FText { text: "( coordination tool · lisboa )"; color: Fq.sub; font.pixelSize: 12; font.letterSpacing: 1 }
         }
         Item { Layout.fillWidth: true }
         RowLayout { id: toolRow; spacing: 8 }
