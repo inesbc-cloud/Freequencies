@@ -25,6 +25,24 @@ function parse(kind, text, when, extra) {
     if (!text) return { error: "Write something first." }
     var d
     if (kind === "task") { d = { text: text, cat: extra.cat || "other", done: extra.done === true }; if (when !== null) d.due = when }
+    else if (kind === "gear") d = { item: text, done: extra.done === true }
     else return { error: "Unknown kind " + kind }
     return { data: d }
+}
+
+// ── gear (#17): ext kind "gear" {item, done}
+var gearPresets = ["CDJs", "Mixer", "Monitors", "Projector", "Mics", "Laptop stand", "Extension leads", "Install station"]
+function gearOf(ev) {
+    var xs = Ext.itemsOf(ev, "gear")
+    xs.sort(function (a, b) { return (a.d.done === true) - (b.d.done === true) || Ext.str(a.d.item).localeCompare(Ext.str(b.d.item)) })
+    return xs
+}
+function packedCount(ev) { return gearOf(ev).filter(function (g) { return g.d.done === true }).length }
+// Presets not yet on the list (matched loosely: "CDJ-3000 ×2" covers "CDJs").
+function missingPresets(ev, n) {
+    var have = gearOf(ev).map(function (g) { return Ext.str(g.d.item).toLowerCase() })
+    return gearPresets.filter(function (p) {
+        var k = p.toLowerCase().replace(/s$/, "")
+        return !have.some(function (h) { return h.indexOf(k) >= 0 })
+    }).slice(0, n)
 }

@@ -13,3 +13,12 @@ test("tasks: open first by deadline, overdue and due soon", () => {
   assert.ok(C.parse("task", " ", null, {}).error);
   assert.equal(C.parse("task", "Pay", 5, { cat: "payment" }).data.due, 5);
 });
+
+test("gear: unpacked first, packed count, presets not on the list", () => {
+  const n = night("a", { ext: [ext("gear", "a", { item: "CDJ-3000 ×2", done: true }), ext("gear", "a", { item: "Projector" })] });
+  assert.equal(C.gearOf(n).map((g) => g.d.item).join(), "Projector,CDJ-3000 ×2");
+  assert.equal(C.packedCount(n), 1);
+  const miss = C.missingPresets(n, 20);
+  assert.ok(!miss.includes("CDJs") && !miss.includes("Projector") && miss.includes("Mixer"));
+  assert.equal(C.parse("gear", "Mics", null, { done: true }).data.item, "Mics");
+});

@@ -96,6 +96,19 @@ Rectangle {
                     tone: function (it) { return Checklist.overdue(it, Date.now()) ? Fq.red : Checklist.dueSoon(it, Date.now()) ? Fq.warn : Fq.sub }
                     onEditItem: function (k, it) { itemPopup.openFor(k, it) }
                 }
+                ChecklistSection {
+                    id: gear
+                    app: panel.app; night: panel.night; canEdit: panel.canEdit
+                    kind: "gear"; label: "Gear (" + Checklist.packedCount(panel.night) + "/" + Checklist.gearOf(panel.night).length + " packed)"; addLabel: "+ item"
+                    items: Checklist.gearOf(panel.night)
+                    onEditItem: function (k, it) { itemPopup.openFor(k, it) }
+                    Flow {
+                        Layout.fillWidth: true; spacing: 10; visible: panel.canEdit
+                        Repeater { model: Checklist.missingPresets(panel.night, 6)
+                            delegate: Link { required property var modelData; text: "+ " + modelData; tone: Fq.faint
+                                onClicked: panel.app.postItem(panel.night, { ns: "xyz.freequencies", kind: "gear", target: panel.night.id, data: { item: modelData, done: false } }, "") } }
+                    }
+                }
                 NotesSection { app: panel.app; night: panel.night; canEdit: panel.canEdit }
             }
         }
