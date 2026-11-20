@@ -33,6 +33,8 @@
         <file>fq/lib/crew.js</file>
         <file>fq/sections/CrewSection.qml</file>
         <file>fq/popups/CrewPopup.qml</file>
+        <file>fq/lib/tags.js</file>
+        <file>fq/sections/TagsSection.qml</file>
         <file>fonts/BebasNeue-Regular.ttf</file>
     </qresource>
 </RCC>

@@ -72,6 +72,7 @@ Rectangle {
                     text: "Read-only: you're a " + Nights.roleOf(panel.cal) + " on this calendar." }
 
                 QuickFields { app: panel.app; night: panel.night; canEdit: panel.canEdit }
+                TagsSection { app: panel.app; night: panel.night; canEdit: panel.canEdit }
                 LineupSection { app: panel.app; night: panel.night; canEdit: panel.canEdit; onEditArtist: function (b) { artistPopup.openFor(b) } }
                 CrewSection { app: panel.app; night: panel.night; canEdit: panel.canEdit; onEditCrew: function (c) { crewPopup.openFor(c) } }
                 NotesSection { app: panel.app; night: panel.night; canEdit: panel.canEdit }

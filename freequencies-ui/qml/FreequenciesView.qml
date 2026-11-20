@@ -26,6 +26,8 @@ import "fq"   // Freequencies: tokens, components, sections, views (one file eac
 import "fq/views"
 import "fq/lib/nights.js" as Nights
 import "fq/lib/colour.js" as Colour
+import "fq/lib/ext.js" as Ext
+import "fq/lib/tags.js" as Tags
 
 Item {
     id: root
@@ -400,6 +402,19 @@ Item {
             if (cb) cb(ok)
         })
     }
+    // One value per night (tags, tickets, poster; ADR 0009): post a fresh item, then retire my older
+    // ones of that kind (and, with same(), only those that match: e.g. one file's flag).
+    function putLatest(night, kind, data, okMsg, same) {
+        if (!night) return
+        var cal = root.calById(night.calendarId), me = cal ? cal.authorAddr : ""
+        var old = Ext.extOf(night, kind).filter(function (x) { return x.author === me && (!same || same(Ext.dataOf(x))) })
+        root.postItem(night, Ext.item(kind, night.id, data, Ext.freshId(kind, night.id)), okMsg, function (ok) {
+            if (ok) for (var i = 0; i < old.length; i++) root.coreAsync("deleteExt", [night.calendarId, old[i].id], function () {})
+        })
+    }
+    readonly property var freqNights: { var ids = {}; for (var i = 0; i < root.freqCals.length; i++) ids[root.freqCals[i].id] = true
+                                        return root.events.filter(function (e) { return !!ids[e.calendarId] }) }
+    readonly property var allTags: Tags.allTags(root.freqNights)
     function bookingColor(st) { return st === "confirmed" ? Fq.confirmed : st === "cancelled" ? Fq.cancelled : Fq.hold }
     // ── Kith (the `kith` core module, ADR 0004): every book's contacts, read when a picker opens ──
     property var kithArtists: []             // [{bookId, id, name}]
