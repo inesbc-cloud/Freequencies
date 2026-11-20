@@ -38,6 +38,8 @@
         <file>fq/lib/tickets.js</file>
         <file>fq/sections/TicketsSection.qml</file>
         <file>fq/popups/TicketsPopup.qml</file>
+        <file>fq/lib/files.js</file>
+        <file>fq/sections/FilesSection.qml</file>
         <file>fonts/BebasNeue-Regular.ttf</file>
     </qresource>
 </RCC>

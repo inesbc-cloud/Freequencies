@@ -1503,6 +1503,19 @@ Item {
             root.attachPollRef = ref; root.attachPollMode = "upload"; attachPoll.restart()
         })
     }
+    // Freequencies (#14): upload straight onto a night from the panel, through the same transfer.
+    property string attachNightId: ""
+    function uploadToNight(night, fileUrl) {
+        if (!night || root.attachBusy) return
+        var path = decodeURIComponent(("" + fileUrl).replace(/^file:\/\//, "")), name = path.split("/").pop()
+        root.attachNightId = night.id
+        root.attachBusy = true; root.attachDiag = ""; root.attachMsg = "Sealing + uploading " + name + "…"
+        root.coreAsync("uploadAttachment", [night.calendarId, path, name, ""], function (r) {
+            var ref = root.unq(r)
+            if (!ref) { root.attachBusy = false; root.attachMsg = "Upload failed to start"; return }
+            root.attachPollRef = ref; root.attachPollMode = "upload-night"; attachPoll.restart()
+        })
+    }
     function openAttachment(calId, cid, name) {
         if (!cid) { root.attachMsg = "Not uploaded yet"; return }
         root.attachBusy = true; root.attachDiag = ""; root.attachMsg = "Fetching " + (name || cid) + "…"
@@ -1532,7 +1545,11 @@ Item {
         root.attachDiag = ""; root.attachProgress = -1
         attachPoll.stop(); root.attachBusy = false
         if (!r.ok) { root.attachMsg = "Failed: " + (r.error || "unknown"); return }
-        if (root.attachPollMode === "upload") {
+        if (root.attachPollMode === "upload-night") {      // Freequencies (#14): add it to the night
+            var night = root.eventById(root.attachNightId), ref = { name: r.name, mime: r.mime, size: r.size, storageCid: r.cid, blobId: r.blobId }
+            root.attachMsg = ""
+            if (night) root.editNight(night, function (up) { up.attachments = (Array.isArray(up.attachments) ? up.attachments : []).concat([ref]) }, "Attached " + r.name)
+        } else if (root.attachPollMode === "upload") {
             var a = root.evAttachments.slice()
             a.push({ name: r.name, mime: r.mime, size: r.size, storageCid: r.cid, blobId: r.blobId })
             root.evAttachments = a; root.attachMsg = "Attached " + r.name

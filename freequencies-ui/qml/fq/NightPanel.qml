@@ -3,6 +3,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Dialogs
 import "lib/nights.js" as Nights
 import "sections"
 import "popups"
@@ -75,6 +76,7 @@ Rectangle {
                 TagsSection { app: panel.app; night: panel.night; canEdit: panel.canEdit }
                 LineupSection { app: panel.app; night: panel.night; canEdit: panel.canEdit; onEditArtist: function (b) { artistPopup.openFor(b) } }
                 TicketsSection { app: panel.app; night: panel.night; canEdit: panel.canEdit; onEditTickets: ticketsPopup.openFor() }
+                FilesSection { app: panel.app; night: panel.night; canEdit: panel.canEdit; onUpload: fileDialog.open() }
                 CrewSection { app: panel.app; night: panel.night; canEdit: panel.canEdit; onEditCrew: function (c) { crewPopup.openFor(c) } }
                 NotesSection { app: panel.app; night: panel.night; canEdit: panel.canEdit }
             }
@@ -88,4 +90,5 @@ Rectangle {
     CrewPopup { id: crewPopup; app: panel.app; night: panel.night }
     property alias dlgTickets: ticketsPopup
     TicketsPopup { id: ticketsPopup; app: panel.app; night: panel.night }
+    FileDialog { id: fileDialog; title: "Attach a file to this night"; onAccepted: panel.app.uploadToNight(panel.night, fileDialog.selectedFile) }
 }
