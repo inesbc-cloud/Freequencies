@@ -34,7 +34,7 @@ office (format → modules → a plan counted back from show day, custom modules
 
 ## Consequences
 
-- Phase 2: a Promo studio (posts and story images built from a night's data). Phase 3: collaboration
+- Phase 2 (done in 0.10.0): the Promo studio, a Promo tab. Phase 3: collaboration
   across collectives (shared holds calendar, co-promotion splits and settlement, venue directory,
   gear library, crew pool, polls, lessons learnt).
 - Android needs readers for `details`, `prod-plan`, `prod-row`, `fund-app`, `fund-link` (#28).
