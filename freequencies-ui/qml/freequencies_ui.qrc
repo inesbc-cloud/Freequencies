@@ -79,5 +79,8 @@
         <file>fq/popups/RowPopup.qml</file>
         <file>fq/views/ProductionView.qml</file>
         <file>fq/views/HomeView.qml</file>
+        <file>fq/lib/promo.js</file>
+        <file>fq/views/PromoCanvas.qml</file>
+        <file>fq/views/PromoView.qml</file>
     </qresource>
 </RCC>

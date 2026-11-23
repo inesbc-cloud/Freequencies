@@ -29,6 +29,7 @@ import "fq/lib/nights.js" as Nights
 import "fq/lib/details.js" as Details
 import "fq/lib/funding.js" as Funding
 import "fq/lib/production.js" as Production
+import "fq/lib/promo.js" as Promo
 import "fq/lib/colour.js" as Colour
 import "fq/lib/ext.js" as Ext
 import "fq/lib/tags.js" as Tags
@@ -472,6 +473,22 @@ Item {
     }
     function deleteRow(night, r, cb) {
         root.putLatest(night, "prod-row", Production.deletedRow(r), "Removed", function (d) { return d.row === r.row }, cb)
+    }
+
+    // ── Promo studio (fq/views/PromoView.qml): plan the campaign into the social planner ──
+    property bool campaignBusy: false
+    function planCampaign(night, names) {
+        if (!night || root.campaignBusy) return
+        var posts = Promo.campaign(night, names, Checklist.postsOf(night))
+        if (!posts.length) { root.notify("The campaign is already in the planner."); return }
+        root.campaignBusy = true
+        var left = posts.length
+        for (var i = 0; i < posts.length; i++) {
+            var it = Ext.item("post", night.id, posts[i], "post:" + Ext.rnd())
+            root.coreAsync("postExt", [night.calendarId, JSON.stringify(it)], function () {
+                if (--left === 0) { root.campaignBusy = false; root.notify(posts.length + " posts planned"); root.refresh() }
+            })
+        }
     }
 
     // ── sections of the app: home · calendar (month/week/…/venues/analytics/funding) · production ──
@@ -1174,6 +1191,7 @@ Item {
         FqButton { objectName: "tabHome"; text: "Home"; primary: root.section === "home"; onClicked: root.section = "home" }
         FqButton { text: "Calendar"; primary: fqHeader.inCal; onClicked: root.showCalendar(["venues", "stats", "funding"].indexOf(root.calMode) >= 0 ? "month" : "") }
         FqButton { objectName: "tabProduction"; text: "Production"; primary: root.section === "production"; onClicked: root.openProduction(null) }
+        FqButton { objectName: "tabPromo"; text: "Promo"; primary: root.section === "promo"; onClicked: root.section = "promo" }
         FqButton { text: "Funding"; primary: root.section === "calendar" && root.calMode === "funding"; onClicked: root.showCalendar("funding") }
         FqButton { text: "Venues"; primary: root.section === "calendar" && root.calMode === "venues"; onClicked: root.showCalendar("venues") }
         FqButton { text: "Analytics"; primary: root.section === "calendar" && root.calMode === "stats"; onClicked: root.showCalendar("stats") }
@@ -1195,6 +1213,12 @@ Item {
     ProductionView {
         id: productionView
         visible: root.section === "production"; app: root
+        anchors.top: fqHeader.bottom; anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
+    }
+
+    PromoView {
+        id: promoView
+        visible: root.section === "promo"; app: root
         anchors.top: fqHeader.bottom; anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
     }
 

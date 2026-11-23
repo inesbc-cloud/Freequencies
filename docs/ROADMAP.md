@@ -79,6 +79,7 @@ not yet on real Basecamp (issue #29); none counts as done until Android reads it
 | Quick new night (name, date, venue, times, line-up; optional kind, audience, tickets, age, access, link) and a Details section; ext kind `details` | — | 🧪 |
 | Sections: Home (what needs you) · Calendar · Production · Funding · Venues · Analytics ([ADR 0010](adr/0010-promoters-workspace.md)) | — | 🧪 |
 | Production: plan per night by format (8 promoter formats, T-minus timeline, team, venue & ops, hospitality, suppliers, run of show, risks, debrief, custom modules; the night's line-up/crew/budget/tickets/posts/gear as modules), after Louisa Prog's INTERSECT production office; ext kinds `prod-plan` / `prod-row` | — | 🧪 |
+| Promo studio: posts and stories from a night's data (announce, line-up, artist cards in a batch, timetable, countdown, tickets, thank you), Feed 4:5 / square / story, EN/PT, your own logo, photos stay on the computer, PNG export; "plan the campaign" dates every post in the social planner | — | 🧪 |
 | Funding library: winning applications with documents, links to funders and open calls; its own "Funding library" calendar (marker field `fq_funding`, one anchor event), ext kinds `fund-app` / `fund-link` | — | 🧪 |
 | Android readers for the new kinds | #28 | ⬜ |
 | Test pass on real Basecamp | #29 | ⬜ |
