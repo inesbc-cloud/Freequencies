@@ -112,6 +112,12 @@ def rid(): return "".join(random.choice(string.ascii_lowercase + string.digits) 
 
 class Bridge(QObject):
     def handle(self, module, method, a):
+        if module == "freequencies_core":
+            if method == "fetchFeed":
+                path = os.environ.get("FQ_MOCK_ICS", "")
+                if not path or not os.path.exists(path): return {"ok": False, "error": "fetch failed"}
+                return {"ok": True, "id": a[0], "body": open(path, encoding="utf-8").read()}
+            return ""
         if module == "scala":
             if method == "coreVersion": return "0.12.7"
             if method == "getIdentity": return ME
@@ -131,6 +137,23 @@ class Bridge(QObject):
                 CALS.append({"id": cid, "name": a[0], "color": a[1] or "#6ef600", "owner": ME, "authorAddr": ME, "roles": {}, "schema": [],
                              "encryptionKey": "k", "open": True, "collab": False})
                 return cid
+            if method == "importIcsFile":
+                # like scala's importIcs: upsert by UID (fallback: FQ_MOCK_ICS when the path is missing)
+                path = a[1] if os.path.exists(a[1]) else os.environ.get("FQ_MOCK_ICS", "")
+                if not path or not os.path.exists(path): return {"imported": 0, "error": "cannot read file"}
+                import re, datetime
+                txt = open(path, encoding="utf-8").read().replace("\r\n", "\n").replace("\n ", "")
+                n = 0
+                for blk in txt.split("BEGIN:VEVENT")[1:]:
+                    f = {}
+                    for line in blk.split("END:VEVENT")[0].strip().split("\n"):
+                        k, _, v = line.partition(":"); f[k.split(";")[0]] = v
+                    def t(v): return int(datetime.datetime.strptime(v, "%Y%m%dT%H%M%SZ").replace(tzinfo=datetime.timezone.utc).timestamp() * 1000) if v else 0
+                    ev = {"id": f.get("UID", rid()), "calendarId": a[0], "title": f.get("SUMMARY", ""), "description": f.get("DESCRIPTION", "").replace("\\n", "\n"),
+                          "location": f.get("LOCATION", "").replace("\\,", ","), "startTime": t(f.get("DTSTART")), "endTime": t(f.get("DTEND")), "ext": []}
+                    EVENTS[:] = [e for e in EVENTS if e["id"] != ev["id"]] + [ev]; n += 1
+                return {"imported": n, "skipped": 0}
+            if method == "generateShareLink": return "scala://join?id=" + a[0] + "&key=k&name=x"
             if method == "listCalendars": return CALS
             if method == "listAllEvents": return EVENTS
             if method == "getEvent":

@@ -47,8 +47,8 @@ Rectangle {
             ColumnLayout {
                 anchors.fill: parent; anchors.margins: 14; spacing: 8
                 DText { text: "PRODUCTION"; font.pixelSize: 34; color: Fq.lime }
-                FText { Layout.fillWidth: true; wrapMode: Text.Wrap; color: Fq.sub; font.pixelSize: 12; text: "A working plan for each night, shared with everyone organising it." }
-                FText { visible: pv.nights.length === 0; Layout.fillWidth: true; wrapMode: Text.Wrap; color: Fq.sub; font.pixelSize: 13; text: "No nights yet. Add one with + Night." }
+                FText { Layout.fillWidth: true; wrapMode: Text.Wrap; color: Fq.sub; font.pixelSize: 12; text: "A working plan for each event, shared with everyone organising it." }
+                FText { visible: pv.nights.length === 0; Layout.fillWidth: true; wrapMode: Text.Wrap; color: Fq.sub; font.pixelSize: 13; text: "No events yet. Add one with + Event." }
                 Flickable {
                     Layout.fillWidth: true; Layout.fillHeight: true; clip: true
                     contentWidth: width; contentHeight: nlist.implicitHeight
@@ -224,5 +224,5 @@ Rectangle {
     CrewPopup { id: crewPopup; app: pv.app; night: pv.night }
     TicketsPopup { id: ticketsPopup; app: pv.app; night: pv.night }
     ItemPopup { id: itemPopup; app: pv.app; night: pv.night }
-    FileDialog { id: fileDialog; title: "Attach a file to this night"; onAccepted: pv.app.uploadToNight(pv.night, fileDialog.selectedFile) }
+    FileDialog { id: fileDialog; title: "Attach a file to this event"; onAccepted: pv.app.uploadToNight(pv.night, fileDialog.selectedFile) }
 }

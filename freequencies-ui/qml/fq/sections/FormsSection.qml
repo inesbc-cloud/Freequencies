@@ -36,7 +36,7 @@ ColumnLayout {
                     Link { visible: fm.modelData.uri !== ""; text: "copy link"; onClicked: fo.app.copyText(fm.modelData.uri) }
                     Link { visible: !!fm.sm && fm.sm.canRead === true; text: "answers"; onClicked: fo.openAnswers(fm.modelData) }
                     Link { visible: (!!fo.cal && fm.modelData.author === fo.cal.authorAddr) || fo.app.isEditorOf(fo.cal); text: "remove"; tone: Fq.red
-                           onClicked: fo.app.deleteItem(fo.night, fm.modelData.id, "Form removed from this night. It stays in WhisperBox.") }
+                           onClicked: fo.app.deleteItem(fo.night, fm.modelData.id, "Form removed from this event. It stays in WhisperBox.") }
                 }
             }
         }

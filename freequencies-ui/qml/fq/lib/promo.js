@@ -62,7 +62,7 @@ function up(s) { return Ext.str(s).toUpperCase() }
 // Returns { kicker, big, lines: [..], rows: [[time, name]], foot }
 function fill(tpl, f) {
     f = f || {}
-    var w = W(f.lang), title = up(f.title) || "NAME OF THE NIGHT"
+    var w = W(f.lang), title = up(f.title) || "NAME OF THE EVENT"
     var when = whenLine(f.start, f.end, f.lang), venue = up(f.venue)
     var foot = [when, venue].filter(function (x) { return !!x }).join("\n")
     var names = (f.lineup || []).map(function (b) { return up(b.name) }).filter(function (x) { return !!x })
@@ -101,7 +101,7 @@ function fileName(tpl, title, artist, size) {
 function campaign(night, lineupNames, existing) {
     var start = night && night.startTime
     if (typeof start !== "number") return []
-    var title = Ext.str(night.title) || "the night", out = [], have = {}
+    var title = Ext.str(night.title) || "the event", out = [], have = {}
     ;(existing || []).forEach(function (p) { have[Ext.str(p.d && p.d.text)] = true })
     function add(t, text) {
         var at = new Date(start - t * DAY); at.setHours(t <= 0 ? 12 : 18, 0, 0, 0)

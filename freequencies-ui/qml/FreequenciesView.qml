@@ -19,6 +19,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Dialogs
+import QtCore
 
 import Logos.Theme
 import Logos.Controls
@@ -30,6 +31,7 @@ import "fq/lib/details.js" as Details
 import "fq/lib/funding.js" as Funding
 import "fq/lib/production.js" as Production
 import "fq/lib/promo.js" as Promo
+import "fq/lib/listings.js" as Listings
 import "fq/lib/colour.js" as Colour
 import "fq/lib/ext.js" as Ext
 import "fq/lib/tags.js" as Tags
@@ -218,25 +220,12 @@ Item {
     property date selectedDay: new Date()
     property string filterCalId: ""      // "" = all calendars (single-focus filter)
     property var hiddenCals: ({})        // per-device show/hide: {calId: true} = hidden from combined views
-    // Freequencies (#5): calendars that aren't Freequencies calendars start hidden; ticking one shows it.
+    // Every calendar shows unless you untick it (calendars without Freequencies fields used to start
+    // hidden, which made new calendars look empty).
     property var shownOthers: ({})
-    readonly property var effHidden: {
-        var h = {}; for (var k in root.hiddenCals) h[k] = root.hiddenCals[k]
-        for (var i = 0; i < root.calendars.length; i++) {
-            var c = root.calendars[i]
-            if (!Nights.isFreqCal(c) && !root.shownOthers[c.id]) h[c.id] = true
-        }
-        return h
-    }
+    readonly property var effHidden: root.hiddenCals
     function calHidden(id) { return !!root.effHidden[id] }
     function toggleCalVisible(id) {
-        var c = root.calById(id)
-        if (c && !Nights.isFreqCal(c)) {
-            var o = {}; for (var k0 in root.shownOthers) o[k0] = root.shownOthers[k0]
-            if (o[id]) delete o[id]; else o[id] = true
-            root.shownOthers = o
-            return
-        }
         var h = {}; for (var k in root.hiddenCals) h[k] = root.hiddenCals[k]
         if (h[id]) delete h[id]; else h[id] = true
         root.hiddenCals = h   // reassign so bindings (monthOccurrences, day/week lists) re-evaluate
@@ -270,6 +259,7 @@ Item {
     readonly property color cLine:    Fq.line
 
     Component.onCompleted: Qt.callLater(function () {
+        root.loadListingsCache()
         root.ready = root.hasBridge()
         if (root.ready) {
             root.checkCoreVersion()
@@ -328,7 +318,7 @@ Item {
                     root.fundingEvents = evs.filter(function (e) { return !!fid[e.calendarId] })
                     cals = cals.filter(function (c) { return !fid[c.id] })
                     evs = evs.filter(function (e) { return !fid[e.calendarId] })
-                    root.calendars = cals; root.calAddr = ca; root.events = evs
+                    root.calendars = cals; root.calAddr = ca; root.scalaEvents = evs; root.events = evs.concat(root.listings)
                     root.refreshBusy = false
                     if (root.refreshAgain) { root.refreshAgain = false; root.refresh() }
                 })
@@ -340,6 +330,7 @@ Item {
     readonly property var calPalette: Fq.swatch
     function calColor(calId) {
         if (!calId) return root.cBlue
+        if (calId === Listings.LISTINGS_CAL) return Fq.pink      // public listings: their own colour
         var h = 0
         for (var i = 0; i < calId.length; i++) h = (h * 31 + calId.charCodeAt(i)) >>> 0
         return root.calPalette[h % root.calPalette.length]
@@ -374,6 +365,7 @@ Item {
     readonly property var selNight: root.selectedNight ? root.eventById(root.selectedNight.seriesId || root.selectedNight.id) : null
     // Nights open in the panel; events of other calendars in Scala's editor, as in Scala.
     function openNight(occ) {
+        if (Listings.isListing(occ)) { listingPopup.openFor(occ); return }
         if (occ && Nights.isFreqCal(root.calById(occ.calendarId))) root.selectedNight = occ
         else root.openEditEvent(occ)
     }
@@ -389,7 +381,7 @@ Item {
             var fresh = root.j(raw, null)
             if (!fresh || typeof fresh !== "object" || fresh.id !== night.id) {
                 root.nightSaving = false
-                root.notify("Couldn't load the night to change it. It may have been deleted.", true); root.refresh(); return
+                root.notify("Couldn't load the event to change it. It may have been deleted.", true); root.refresh(); return
             }
             var up = JSON.parse(JSON.stringify(fresh))
             delete up.seriesId; delete up.occ; delete up.ext; delete up.rsvps
@@ -491,6 +483,76 @@ Item {
         }
     }
 
+    // ── Lisboa (fq/lib/listings.js): the shared community calendar, and public listings ──
+    readonly property var communityCal: root.calendars.filter(function (c) { return Listings.isCommunityCal(c) })[0] || null
+    property bool lisboaBusy: false
+    // Once, by the organiser: "Lisboa", every collective's public events (anyone adds, edits their own).
+    function setupLisboa() {
+        if (root.lisboaBusy || root.communityCal) return
+        root.lisboaBusy = true
+        root.coreAsync("createCalendar", ["Lisboa", "#6ef600", root.appearArg(root.newCalAppear, root.createDefaultOwner)], function (r) {
+            var id = root.unq(r) || String(root.j(r, "") || "")
+            if (!id) { root.lisboaBusy = false; root.notify("Couldn't create the Lisboa calendar.", true); return }
+            var meta = { schema: Listings.withField(Nights.adoptedSchema([]), Listings.communityField), open: true, collab: false,
+                         description: "Lisbon's independent culture, from every collective using Freequencies. Add your public events; you edit your own." }
+            root.coreAsync("updateCalendarMeta", [id, JSON.stringify(meta)], function () {
+                root.lisboaBusy = false; root.notify("Lisboa calendar ready. Copy its join link so every install joins it."); root.refresh()
+            })
+        })
+    }
+    // Public listings: every install fetches the official feeds itself, every hour, through the
+    // freequencies_core module (views have no network). Kept on this computer, never in Scala.
+    property var scalaEvents: []
+    property var listings: []
+    property var listingsStatus: ({})        // { at, count, error }
+    readonly property var listingEvents: root.listings
+    onListingsChanged: root.events = root.scalaEvents.concat(root.listings)
+    Settings { id: listingsStore; category: "freequencies-listings"; property string cache: "" }
+    function loadListingsCache() { try { var c = JSON.parse(listingsStore.cache || "[]"); if (Array.isArray(c)) root.listings = c } catch (e) {} }
+    property bool listingsBusy: false
+    function fetchListings() {
+        if (root.listingsBusy) return
+        root.listingsBusy = true
+        var srcs = Listings.SOURCES, all = [], errs = [], left = srcs.length
+        for (var i = 0; i < srcs.length; i++) (function (src) {
+            root.callVia("freequencies_core", "fetchFeed", [src.id], function (r) {
+                var res = root.j(r, {})
+                if (res && res.ok && res.body) all = all.concat(Listings.parseIcs(res.body, src.label))
+                else errs.push(src.label + ": " + ((res && res.error) || "the Freequencies Core module isn't installed"))
+                if (--left === 0) {
+                    root.listingsBusy = false
+                    var now = Date.now()
+                    if (all.length || !errs.length) {
+                        all = all.filter(function (e) { return e.endTime > now - 86400000 }).sort(function (a, b) { return a.startTime - b.startTime })
+                        root.listings = all; listingsStore.cache = JSON.stringify(all)
+                    }
+                    root.listingsStatus = { at: now, count: all.length, error: errs.join("; ") }
+                }
+            })
+        })(srcs[i])
+    }
+    Timer { interval: 3600000; repeat: true; running: root.ready; onTriggered: root.fetchListings() }
+    Timer { interval: 8000; repeat: false; running: root.ready; onTriggered: root.fetchListings() }
+    // Join the built-in shared calendars this install doesn't have yet (once per run).
+    property bool autoJoined: false
+    function autoJoin() {
+        if (root.autoJoined || !root.ready) return
+        root.autoJoined = true
+        var links = Listings.linksToJoin(Listings.JOIN_LINKS, root.calendars.concat(root.fundingCals))
+        for (var i = 0; i < links.length; i++)
+            root.coreAsync("handleShareLink", [links[i], root.appearArg(root.joinAppear, root.defaultIdentityId)], function () { root.refresh() })
+    }
+    Timer { interval: 20000; running: root.ready && !root.autoJoined; repeat: false; onTriggered: root.autoJoin() }
+    function copyLisboaLinks() {
+        var cs = [root.communityCal].filter(function (c) { return !!c }), out = [], left = cs.length
+        for (var i = 0; i < cs.length; i++) (function (c) {
+            root.coreAsync("generateShareLink", [c.id], function (r) {
+                out.push(c.name + ": " + root.j(r, ""))
+                if (--left === 0) root.copyText(out.join("\n"))
+            })
+        })(cs[i])
+    }
+
     // ── sections of the app: home · calendar (month/week/…/venues/analytics/funding) · production ──
     property string section: "home"
     function showCalendar(mode) { root.section = "calendar"; if (mode) root.calMode = mode }
@@ -561,7 +623,7 @@ Item {
     function addForm(night, occ, purpose, cb) {
         if (!night || root.formBusy) return
         var when = Qt.formatDate(new Date((occ || night).startTime), "d MMM")
-        var def = Tpl.template(purpose, { title: Forms.purposeLabel(purpose) + ": " + (night.title || "our night") + " (" + when + ")" })
+        var def = Tpl.template(purpose, { title: Forms.purposeLabel(purpose) + ": " + (night.title || "our event") + " (" + when + ")" })
         root.formBusy = true
         root.wb("createForm", [JSON.stringify(def)], function (r) {
             var res = root.j(r, {})
@@ -611,7 +673,7 @@ Item {
     }
     function newPublicCalendar(night, cb) {
         var cal = night ? root.calById(night.calendarId) : null
-        root.coreAsync("createCalendar", [((cal && cal.name) || "Our nights") + " (public)", (cal && cal.color) || "#6ef600", ""], function (r) {
+        root.coreAsync("createCalendar", [((cal && cal.name) || "Our events") + " (public)", (cal && cal.color) || "#6ef600", ""], function (r) {
             var id = root.unq(r) || String(root.j(r, "") || "")
             if (!id) { root.notify("Couldn't create the calendar.", true); cb(""); return }
             root.coreAsync("updateCalendarMeta", [id, JSON.stringify({ open: false, description: "What's on. Published from Freequencies." })], function () { cb(id) })
@@ -625,7 +687,7 @@ Item {
         root.dupBusy = true
         root.coreAsync("createEvent", [night.calendarId, JSON.stringify(c.event)], function (r) {
             var id = root.unq(r) || String(root.j(r, "") || "")
-            if (!id) { root.dupBusy = false; root.notify("Couldn't duplicate the night.", true); return }
+            if (!id) { root.dupBusy = false; root.notify("Couldn't duplicate the event.", true); return }
             var left = c.items.length
             function done() {
                 root.dupBusy = false
@@ -662,7 +724,7 @@ Item {
         root.quickBusy = true
         root.coreAsync("createEvent", [calId, JSON.stringify(r.event)], function (res) {
             var id = root.unq(res) || String(root.j(res, "") || "")
-            if (!id) { root.quickBusy = false; root.notify("Couldn't add the night. You may not be able to add to this calendar.", true); return }
+            if (!id) { root.quickBusy = false; root.notify("Couldn't add the event. You may not be able to add to this calendar.", true); return }
             root.lastCalId = calId
             var left = r.items.length
             function done() {
@@ -704,7 +766,7 @@ Item {
             })
         }
         if (root.fundingCal) { anchor(root.fundingCal.id); return }   // calendar there, anchor missing
-        root.coreAsync("createCalendar", ["Funding library", "#c6ff00", ""], function (r) {
+        root.coreAsync("createCalendar", ["Funding library", "#c6ff00", root.appearArg(root.newCalAppear, root.createDefaultOwner)], function (r) {
             var id = root.unq(r) || String(root.j(r, "") || "")
             if (!id) { root.fundingBusy = false; root.notify("Couldn't create the funding library.", true); return }
             var meta = { schema: Funding.fundingSchema([]), open: true, collab: true, description: "Freequencies funding library: winning applications and links to funding." }
@@ -749,9 +811,9 @@ Item {
     function moveNightTo(occ, day, by, laneId) {
         var night = root.eventById(occ.seriesId || occ.id)
         if (!night) return
-        if (!root.canEditNight(night)) { root.notify("You can't move nights on this calendar.", true); return }
+        if (!root.canEditNight(night)) { root.notify("You can't move events on this calendar.", true); return }
         var setField = (by === "venue" || by === "status") && laneId !== "—" && laneId !== Nights.fieldOf(night, by)
-        if (by === "calendar" && laneId !== night.calendarId) root.notify("Nights can't move between calendars: duplicate it there instead.", true)
+        if (by === "calendar" && laneId !== night.calendarId) root.notify("Events can't move between calendars: duplicate it there instead.", true)
         if (!setField) { root.moveEventToDay(occ, day); return }
         var s = new Date(occ.startTime), ns = new Date(day.getFullYear(), day.getMonth(), day.getDate(), s.getHours(), s.getMinutes(), 0, 0)
         var shift = ns.getTime() - occ.startTime
@@ -808,7 +870,7 @@ Item {
         var why = Nights.adoptBlocker(c)
         if (why) return why
         for (var i = 0; i < root.events.length; i++) if (root.events[i].calendarId === c.id && String(root.events[i].id).indexOf("pub-") === 0)
-            return "Holds public copies of nights, so it stays a public calendar"
+            return "Holds public copies of events, so it stays a public calendar"
         return ""
     }
     function adoptCalendar(c) {
@@ -912,6 +974,7 @@ Item {
         for (var i = 0; i < occs.length; i++) {
             var o = occs[i]
             if (o.allDay || !(o.endTime > o.startTime) || !o.calendarId) continue
+            if (o.calendarId === Listings.LISTINGS_CAL) continue   // public listings overlap by nature
             (groups[o.calendarId] = groups[o.calendarId] || []).push(o)
         }
         function add(a, b) { var k = root.occKey(a); (out[k] = out[k] || []).push(b) }
@@ -1196,12 +1259,13 @@ Item {
         FqButton { text: "Venues"; primary: root.section === "calendar" && root.calMode === "venues"; onClicked: root.showCalendar("venues") }
         FqButton { text: "Analytics"; primary: root.section === "calendar" && root.calMode === "stats"; onClicked: root.showCalendar("stats") }
         Link { text: "debug"; tone: Fq.faint; onClicked: root.openDiag() }
-        FqButton { text: "+ Night"; primary: true; onClicked: root.openQuickNight() }
+        FqButton { text: "+ Event"; primary: true; onClicked: root.openQuickNight() }
         anchors.top: soonBanner.bottom; anchors.left: parent.left; anchors.right: parent.right
     }
     // The quick new-night form (name, date, venue, times, line-up; more details optional).
     property alias dlgQuickNight: quickNight
     NewNightPopup { id: quickNight; app: root }
+    ListingPopup { id: listingPopup; app: root }
 
     // 3 resizable panes: calendars | month | agenda. Drag the dividers to resize.
     // Home and Production: full-width pages over the calendar's panes.
@@ -1305,6 +1369,7 @@ Item {
                     }
                 }
 
+                LisboaPanel { app: root; Layout.fillWidth: true }
                 OtherCalendars { app: root; Layout.fillWidth: true }
 
                 // Field filter (every view): enum values and yes/no fields of the shown calendars.

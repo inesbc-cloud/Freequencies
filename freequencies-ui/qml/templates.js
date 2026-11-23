@@ -171,7 +171,7 @@ var TEMPLATES = {
     ]
   },
   "feedback": {
-    "title": "How was the night?",
+    "title": "How was the event?",
     "description": "Anonymous: nobody can tell who answered.",
     "anonymous": true,
     "questions": [

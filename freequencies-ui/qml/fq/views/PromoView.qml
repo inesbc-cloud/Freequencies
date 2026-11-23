@@ -88,7 +88,7 @@ Rectangle {
                     logo: saved.logo; logoText: saved.logoText
                 }
             }
-            FText { visible: !ps.night; anchors.centerIn: parent; text: "Add a night first (+ Night), then make its posts here."; color: Fq.sub; font.pixelSize: 14 }
+            FText { visible: !ps.night; anchors.centerIn: parent; text: "Add an event first (+ Event), then make its posts here."; color: Fq.sub; font.pixelSize: 14 }
         }
 
         // ── controls ──
@@ -104,7 +104,7 @@ Rectangle {
                     width: parent.width - 8; spacing: 8
                     DText { text: "PROMO STUDIO"; font.pixelSize: 32; color: Fq.lime }
 
-                    Label_ { text: "NIGHT" }
+                    Label_ { text: "EVENT" }
                     Flow { Layout.fillWidth: true; spacing: 6
                         Repeater { model: ps.nights.slice(0, 10)
                             delegate: Chip { required property int index; readonly property var n: ps.nights[index]
@@ -157,7 +157,7 @@ Rectangle {
                         Chip { text: "EN"; on: ps.lang === "en"; onClicked: ps.lang = "en" }
                         Chip { text: "PT"; on: ps.lang === "pt"; onClicked: ps.lang = "pt" } }
 
-                    Label_ { text: "NAME OF THE NIGHT" }
+                    Label_ { text: "NAME OF THE EVENT" }
                     Field { id: titleIn; Layout.fillWidth: true; placeholderText: ps.night ? ps.night.title : "" }
                     ColumnLayout {
                         visible: ps.tpl === "tickets"; Layout.fillWidth: true; spacing: 6
@@ -178,11 +178,11 @@ Rectangle {
 
                     Sec { label: "Campaign"; Layout.topMargin: 10 }
                     FText { Layout.fillWidth: true; wrapMode: Text.Wrap; color: Fq.sub; font.pixelSize: 12
-                        text: "Puts every post in this night's social planner with a date: announce (T-28), line-up (T-14), one artist card each (T-10 to T-3), tickets (T-7), timetable (T-1), countdown (show day), thank you (T+1). They show up on Home when they're due." }
+                        text: "Puts every post in this event's social planner with a date: announce (T-28), line-up (T-14), one artist card each (T-10 to T-3), tickets (T-7), timetable (T-1), countdown (show day), thank you (T+1). They show up on Home when they're due." }
                     FqButton { Layout.fillWidth: true; text: ps.app.campaignBusy ? "Planning…" : "Plan the campaign"; enabled: !!ps.night && !ps.app.campaignBusy
                         onClicked: ps.app.planCampaign(ps.night, ps.lineup.map(function (b) { return b.name })) }
                     FText { visible: !!ps.night; Layout.fillWidth: true; color: Fq.faint; font.pixelSize: 11
-                        text: ps.night ? Checklist.postsOf(ps.night).length + " posts planned for this night" : "" }
+                        text: ps.night ? Checklist.postsOf(ps.night).length + " posts planned for this event" : "" }
                 }
             }
         }

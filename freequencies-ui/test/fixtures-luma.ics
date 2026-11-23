@@ -1,0 +1,79 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Luma//What’s Happening in Lisbon//EN
+X-WR-CALNAME:What’s Happening in Lisbon
+X-WR-CALDESC:Luma Calendar
+REFRESH-INTERVAL;VALUE=DURATION:PT12H
+X-PUBLISHED-TTL:PT12H
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+BEGIN:VEVENT
+DTSTART:20261124T190000Z
+DTEND:20261124T220000Z
+DTSTAMP:20261123T134127Z
+ORGANIZER;CN="Romana Siracusa":MAILTO:calendar-invite@lu.ma
+UID:evt-Cn2fCnENMSBgMtG@events.lu.ma
+SUMMARY:Christmas Dinner for Lisbon Female Founders
+DESCRIPTION:Get up-to-date information at: https://luma.com/0leb1bjm\n\nAd
+ dress:\nCheck event page for more details.\n\nHi, we’re Ro and Carla, an
+ d we had an idea...\nCompanies throw Christmas dinners. Secret Santa. Too 
+ much wine. And someone from HR gives a speech nobody asked for.\nAnd when 
+ you’re a founder without a big team?\nYour Christmas party is you, your 
+ laptop, and an ugly Christmas sweater nobody sees.\nSo we’re fixing that
+ .\nWe’re hosting a Christmas dinner for the female founders of Lisbon. A
+ ll year you’ve been the CEO, the marketing team, the accountant, and IT 
+ support. This December, you finally get the Christmas party invite.\nWhat
+ ’s on the table\nGood food, good wine, and a long table full of women…
+ \n\nHosted by Romana Siracusa & Carla Biesinger
+LOCATION:https://luma.com/event/evt-Cn2fCnENMSBgMtG
+GEO:38.71451506118044;-9.142780198880475
+SEQUENCE:217604487
+STATUS:TENTATIVE
+END:VEVENT
+BEGIN:VEVENT
+DTSTART:20261124T190000Z
+DTEND:20261124T200000Z
+DTSTAMP:20261123T134127Z
+ORGANIZER;CN="Well Read":MAILTO:calendar-invite@lu.ma
+UID:evt-y5iZlPYI9MXfUHz@events.lu.ma
+SUMMARY:Mirror Tarot with Sarah Shin and Colectivo Arquétipa
+DESCRIPTION:Get up-to-date information at: https://luma.com/ka5cqmfs\n\nAd
+ dress:\nWell Read\nLisboa, Portugal\n\nJoin us at Well Read for an evening
+  exploring the worlds of Mirror Tarot: a book and tarot deck by Sammy Lee
+  and Sarah Shin, on Spiral House. Sarah Shin, Kaitlyn Davies and members o
+ f Colectivo Arquétipa will explore the tarot as a worldmaking tool and I
+ talo Calvino’s conception of the tarot as ‘a machine for constructing 
+ stories’.\nThey will touch upon the tarot's relationship to artistic, l
+ iterary and intellectual history: from al-Andalus and the Neoplatonist Ren
+ aissance to psychoanalysis, manga and cosmology.\nThe conversation will be
+  followed by tarot readings using a selection of decks,…\n\nHosted by We
+ ll Read
+LOCATION:Well Read, CC de Sant'Ana 92 94, 1150-305 Lisboa, Portugal
+GEO:38.71642430000001;-9.1384666
+SEQUENCE:217604487
+STATUS:TENTATIVE
+END:VEVENT
+BEGIN:VEVENT
+DTSTART:20261125T170000Z
+DTEND:20261125T230000Z
+DTSTAMP:20261123T134127Z
+ORGANIZER;CN="Louisa H":MAILTO:calendar-invite@lu.ma
+UID:evt-737SOwCoAGpIBaM@events.lu.ma
+SUMMARY:Freequencies
+DESCRIPTION:Get up-to-date information at: https://luma.com/logos-gcp2\n\n
+ Address:\nDamas\nLisboa, Portugal\n\nFreequencies continue their series wi
+ th  another evening of live performance, workshopping cutting-edge techno
+ logies, and knowledge exchange among participating cultural collectives.\n
+ It brings together artistic collectives, technologists, and cultural organ
+ isers, as an ongoing collaborative experiment in building new infrastructu
+ re for independent cultural communities.\nThe event series will act as a h
+ ybrid space for:\nPerformance (music, dance, visual art)\nKnowledge exchan
+ ge\nExperimental collaboration (music, dance, visual art, and short-form p
+ resentations\nParticipants can join events in…\n\nHosted by Louisa H & 3
+  others
+LOCATION:Damas, R. da Voz do Operário 60, 1170-039 Lisboa, Portugal
+GEO:38.71648880000001;-9.129401999999999
+SEQUENCE:217604487
+STATUS:TENTATIVE
+END:VEVENT
+END:VCALENDAR

@@ -33,6 +33,6 @@ function people(o) {
     return out
 }
 function line(c, when) {
-    return c.kind === "venue" ? "⚠ " + c.name + " is also booked for " + (c.other.title || "another night") + ", " + when
-                              : "⚠ " + c.name + " is also on " + (c.other.title || "another night") + ", " + when
+    return c.kind === "venue" ? "⚠ " + c.name + " is also booked for " + (c.other.title || "another event") + ", " + when
+                              : "⚠ " + c.name + " is also on " + (c.other.title || "another event") + ", " + when
 }

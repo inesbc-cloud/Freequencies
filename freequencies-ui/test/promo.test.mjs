@@ -23,7 +23,7 @@ test("promo: every template fills from the night", () => {
   assert.equal(P.fill("countdown", f).big, "TONIGHT");
   assert.equal(P.fill("tickets", f).big, "LAST TICKETS");
   assert.deepEqual(plain(P.fill("lineup", f).lines), ["LATE ONE", "OPENER"]);
-  assert.equal(P.fill("announce", {}).big, "NAME OF THE NIGHT");
+  assert.equal(P.fill("announce", {}).big, "NAME OF THE EVENT");
 });
 test("promo: file names and big text size", () => {
   assert.equal(P.fileName("artist", "Freequencies 02", "Ságat Á", "feed"), "freequencies-02-artist-sagat-a-feed.png");

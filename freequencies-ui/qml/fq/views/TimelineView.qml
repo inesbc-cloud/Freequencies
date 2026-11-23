@@ -32,7 +32,7 @@ ColumnLayout {
         ColumnLayout {
             id: col
             width: fl.width - 12; spacing: 8
-            FText { visible: tv.groups.length === 0; text: tv.past ? "No past nights in the last year." : "Nothing coming up yet."; color: Fq.sub; font.pixelSize: 14 }
+            FText { visible: tv.groups.length === 0; text: tv.past ? "No past events in the last year." : "Nothing coming up yet."; color: Fq.sub; font.pixelSize: 14 }
             Repeater {
                 model: tv.groups
                 delegate: ColumnLayout {
@@ -43,7 +43,7 @@ ColumnLayout {
                         Layout.fillWidth: true; Layout.topMargin: 8; spacing: 12
                         DText { text: Qt.formatDate(new Date(grp.modelData.first), "MMMM yyyy").toUpperCase(); color: Fq.lime; font.pixelSize: 34 }
                         Rectangle { Layout.fillWidth: true; height: 1; color: Fq.line }
-                        FText { text: grp.modelData.occs.length + (grp.modelData.occs.length === 1 ? " night" : " nights"); color: Fq.faint; font.pixelSize: 12 }
+                        FText { text: grp.modelData.occs.length + (grp.modelData.occs.length === 1 ? " event" : " events"); color: Fq.faint; font.pixelSize: 12 }
                     }
                     Repeater {
                         model: grp.modelData.occs
