@@ -89,7 +89,7 @@ function isEmpty(d) { for (var k in d) return false; return true }
 function quickNight(f) {
     f = f || {}
     var title = clean(f.title, 160)
-    if (!title) return { error: "Give the night a name." }
+    if (!title) return { error: "Give the event a name." }
     var t = timesOf(f.date, f.start, f.end)
     if (t.error) return t
     var det = detailsData(f)

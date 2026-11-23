@@ -17,7 +17,7 @@ function repeatLabel(ev) {
 }
 // The new event (for createEvent) and the ext items to post on it once it exists.
 function copyOf(m) {
-    var ev = { title: m.title || "Untitled night", startTime: m.startTime + WEEK, endTime: (m.endTime || m.startTime) + WEEK, reminderMin: 60,
+    var ev = { title: m.title || "Untitled event", startTime: m.startTime + WEEK, endTime: (m.endTime || m.startTime) + WEEK, reminderMin: 60,
                fields: { status: "Hold", venue: Ext.str(m.fields && m.fields.venue), type: Ext.str(m.fields && m.fields.type) || "Club night" } }
     if (m.description) ev.description = m.description
     var items = []

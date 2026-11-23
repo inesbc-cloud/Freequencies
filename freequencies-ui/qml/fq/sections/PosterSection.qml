@@ -14,5 +14,5 @@ ColumnLayout {
     Sec { label: "Poster"; action: ps.canEdit ? (Poster.posterOf(ps.night) ? "change" : "+ set") : ""; onAct: ps.change() }
     FText { Layout.fillWidth: true; wrapMode: Text.Wrap; color: Fq.sub; font.pixelSize: 12
         text: Poster.posterOf(ps.night) ? (ps.app.posterSrc(ps.night) ? "Shows on the calendar, the timeline and at the top of this panel." : "Fetching it from Logos Storage…")
-              : "Pick an image file attached to the night, or paste an image link." }
+              : "Pick an image file attached to the event, or paste an image link." }
 }

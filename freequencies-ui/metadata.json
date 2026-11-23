@@ -2,7 +2,7 @@
   "name": "freequencies_ui",
   "display_name": "Freequencies",
   "icon": "icon.png",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "type": "ui_qml",
   "category": "general",
   "description": "Freequencies: the coordination tool for Lisbon's independent culture, built on Scala's calendar app (a fork of its view over the scala core)",
@@ -25,5 +25,8 @@
       "extra_include_dirs": [],
       "extra_link_libraries": []
     }
-  }
+  },
+  "optional_dependencies": [
+    "freequencies_core"
+  ]
 }

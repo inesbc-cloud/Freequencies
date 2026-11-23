@@ -151,5 +151,5 @@ Rectangle {
     ResponsesPopup { id: responsesPopup; app: panel.app }
     property alias dlgPublic: publicPopup
     PublicPopup { id: publicPopup; app: panel.app; night: panel.night }
-    FileDialog { id: fileDialog; title: "Attach a file to this night"; onAccepted: panel.app.uploadToNight(panel.night, fileDialog.selectedFile) }
+    FileDialog { id: fileDialog; title: "Attach a file to this event"; onAccepted: panel.app.uploadToNight(panel.night, fileDialog.selectedFile) }
 }

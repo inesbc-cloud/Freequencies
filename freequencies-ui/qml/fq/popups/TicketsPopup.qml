@@ -34,7 +34,7 @@ Win {
         ColumnLayout { spacing: 4; Label_ { text: "CURRENCY" } Field { id: cur; Layout.preferredWidth: 90 } }
     }
     FText { Layout.fillWidth: true; wrapMode: Text.Wrap; color: Fq.faint; font.pixelSize: 12
-        text: "Numbers are typed in for now. Sales count towards attendance and revenue in Analytics and the night's budget." }
+        text: "Numbers are typed in for now. Sales count towards attendance and revenue in Analytics and the event's budget." }
     RowLayout {
         Layout.fillWidth: true; Layout.topMargin: 8; spacing: 8
         Item { Layout.fillWidth: true }

@@ -1,5 +1,4 @@
-// Sidebar: the Scala calendars that aren't Freequencies calendars (#5). Hidden from the views until
-// you tick them; "use for Freequencies" adds the Status / Venue / Type fields (or says why it can't).
+// Sidebar: the Scala calendars that aren't Freequencies calendars (#5). Shown until you untick them; "use for Freequencies" adds the Status / Venue / Type fields (or says why it can't).
 import QtQuick
 import QtQuick.Layouts
 import "lib/nights.js" as Nights

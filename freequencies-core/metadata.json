@@ -1,0 +1,16 @@
+{
+  "name": "freequencies_core",
+  "display_name": "Freequencies Core",
+  "version": "0.1.0",
+  "type": "core",
+  "interface": "universal",
+  "category": "general",
+  "description": "Freequencies background helper: fetches the public event listings for Lisbon (Luma's official feed) for the Freequencies view, which has no network access of its own. Only fixed, official feed addresses.",
+  "main": "freequencies_core_plugin",
+  "dependencies": [],
+  "nix": {
+    "packages": { "build": [], "runtime": [] },
+    "external_libraries": [],
+    "cmake": { "find_packages": [], "extra_sources": [], "extra_include_dirs": [], "extra_link_libraries": [] }
+  }
+}

@@ -13,9 +13,9 @@ Win {
     title: "poster.exe"
     readonly property var images: Files.filesOf(night).filter(Files.isImage)
     function openFor() { var p = Poster.posterOf(night); link.text = p && p.url ? p.url : ""; open() }
-    Label_ { text: "FROM THE NIGHT'S FILES" }
+    Label_ { text: "FROM THE EVENT'S FILES" }
     FText { visible: pp.images.length === 0; Layout.fillWidth: true; wrapMode: Text.Wrap; color: Fq.sub; font.pixelSize: 12
-        text: "No image files on this night yet. Upload the poster under Files, or paste a link below." }
+        text: "No image files on this event yet. Upload the poster under Files, or paste a link below." }
     Flow { Layout.fillWidth: true; spacing: 6
         Repeater { model: pp.images
             delegate: Chip { required property var modelData; text: modelData.name || "image"; on: (Poster.posterOf(pp.night) || {}).cid === modelData.storageCid

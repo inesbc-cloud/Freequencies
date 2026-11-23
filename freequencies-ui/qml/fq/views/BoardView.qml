@@ -21,7 +21,7 @@ ColumnLayout {
         FText { text: "COLUMNS"; color: Fq.faint; font.pixelSize: 12; font.letterSpacing: 1.2; height: 26; verticalAlignment: Text.AlignVCenter }
         Repeater { model: [{ id: "venue", l: "Venue" }, { id: "status", l: "Status" }, { id: "calendar", l: "Calendar" }]
             delegate: Chip { required property var modelData; text: modelData.l; on: bv.app.laneBy === modelData.id; onClicked: bv.app.laneBy = modelData.id } }
-        FText { text: "· drop a night in another column to change its " + bv.app.laneBy; color: Fq.faint; font.pixelSize: 12; height: 26; verticalAlignment: Text.AlignVCenter
+        FText { text: "· drop an event in another column to change its " + bv.app.laneBy; color: Fq.faint; font.pixelSize: 12; height: 26; verticalAlignment: Text.AlignVCenter
                 visible: bv.app.laneBy !== "calendar" }
     }
     Flickable {
@@ -30,7 +30,7 @@ ColumnLayout {
         boundsBehavior: Flickable.StopAtBounds
         ScrollBar.vertical: ScrollBar {}
         ScrollBar.horizontal: ScrollBar {}
-        FText { visible: bv.grid.lanes.length === 0; text: "No nights in these two weeks. Add one with “+ Night”."; color: Fq.sub; font.pixelSize: 14 }
+        FText { visible: bv.grid.lanes.length === 0; text: "No events in these two weeks. Add one with “+ Event”."; color: Fq.sub; font.pixelSize: 14 }
         Column {
             id: board
             Row {

@@ -25,12 +25,12 @@ Flickable {
         GridLayout {
             Layout.fillWidth: true; columns: col.width > 900 ? 6 : 3; columnSpacing: -1; rowSpacing: -1
             Repeater {
-                model: [{ l: "Nights", v: String(av.s.tot.nights), x: av.s.tot.confirmed + " confirmed · " + av.s.tot.hold + " on hold" },
+                model: [{ l: "Events", v: String(av.s.tot.nights), x: av.s.tot.confirmed + " confirmed · " + av.s.tot.hold + " on hold" },
                         { l: "Attendance", v: String(av.s.tot.attendance), x: "tickets sold, or RSVPs going" },
                         { l: "Revenue", v: Money.money(av.s.tot.revenue), x: "tickets + income lines" },
                         { l: "Result", v: Money.money(av.s.tot.profit), x: "after fees and costs" },
                         { l: "Artists", v: String(av.s.tot.artists), x: "different acts booked" },
-                        { l: "Cancelled", v: String(av.s.tot.cancelled), x: "nights called off" }]
+                        { l: "Cancelled", v: String(av.s.tot.cancelled), x: "events called off" }]
                 delegate: Rectangle {
                     required property var modelData
                     Layout.fillWidth: true; Layout.preferredHeight: 100; color: Fq.mantle; border.width: 1; border.color: Fq.line
@@ -42,7 +42,7 @@ Flickable {
             }
         }
         Repeater {
-            model: [{ l: "Nights per month", k: "nights" }, { l: "Attendance per month", k: "attendance" }, { l: "Revenue per month (EUR)", k: "revenue" }]
+            model: [{ l: "Events per month", k: "nights" }, { l: "Attendance per month", k: "attendance" }, { l: "Revenue per month (EUR)", k: "revenue" }]
             delegate: ColumnLayout {
                 id: chart
                 required property var modelData

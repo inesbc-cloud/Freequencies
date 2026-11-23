@@ -82,5 +82,8 @@
         <file>fq/lib/promo.js</file>
         <file>fq/views/PromoCanvas.qml</file>
         <file>fq/views/PromoView.qml</file>
+        <file>fq/lib/listings.js</file>
+        <file>fq/LisboaPanel.qml</file>
+        <file>fq/popups/ListingPopup.qml</file>
     </qresource>
 </RCC>

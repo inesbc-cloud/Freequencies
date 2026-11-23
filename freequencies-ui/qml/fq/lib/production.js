@@ -17,12 +17,12 @@ function col(k, l, type, opts) { var c = { k: k, l: l, type: type || "text" }; i
 var DONE = ["Done", "Confirmed", "Booked", "Paid", "Signed", "Approved", "Sent", "Received", "Closed", "Mitigated", "Yes"]
 
 var TABLES = {
-    goals:      { t: "Goals", lead: "Two or three things this night should achieve, each with something you can count.",
+    goals:      { t: "Goals", lead: "Two or three things this event should achieve, each with something you can count.",
                   cols: [col("goal", "Goal", "long"), col("measure", "How we'll know", "text"), col("target", "Target", "text"), col("actual", "Actual", "text")] },
     milestones: { t: "Timeline", lead: "Counted back from show day: move the date and every deadline moves with it.",
                   cols: [col("t", "Days before", "tminus"), col("task", "Milestone", "long"), col("owner", "Owner", "text"), col("done", "Done", "check")] },
-    team:       { t: "Team & roles", lead: "One person per job, with a way to reach them on the night.",
-                  cols: [col("role", "Role", "text"), col("name", "Who", "text"), col("contact", "Contact", "text"), col("onNight", "On the night", "check")] },
+    team:       { t: "Team & roles", lead: "One person per job, with a way to reach them during the event.",
+                  cols: [col("role", "Role", "text"), col("name", "Who", "text"), col("contact", "Contact", "text"), col("onNight", "On the day", "check")] },
     venue:      { t: "Venue & ops", lead: "Check what the venue already has before you plan around it.",
                   cols: [col("item", "Check", "long"), col("owner", "Owner", "text"), col("status", "Status", "select", ["To check", "Asked", "Confirmed", "Problem"]), col("notes", "Notes", "text")] },
     permits:    { t: "Licences & compliance", lead: "What needs a permit, insurance or a signature, and by when.",
@@ -31,7 +31,7 @@ var TABLES = {
                   cols: [col("for", "For", "text"), col("item", "What", "text"), col("qty", "Qty", "num"), col("cost", "Cost", "money"), col("status", "Status", "select", ["Needed", "Booked", "Done"])] },
     vendors:    { t: "Suppliers", lead: "Sound, lights, security, bar, printing… Get two quotes for anything big.",
                   cols: [col("vendor", "Supplier", "text"), col("service", "Service", "text"), col("quote", "Quote", "money"), col("contact", "Contact", "text"), col("status", "Status", "select", ["Asked", "Quoted", "Booked", "Paid"])] },
-    ros:        { t: "Run of show", lead: "The night minute by minute. Share it with the crew the day before.",
+    ros:        { t: "Run of show", lead: "The event minute by minute. Share it with the crew the day before.",
                   cols: [col("time", "Time", "time"), col("what", "What happens", "long"), col("who", "Who", "text"), col("where", "Where", "text")] },
     risks:      { t: "Risks", lead: "What could go wrong, how likely, how bad, and the plan B. 6 or more needs an owner.",
                   cols: [col("risk", "Risk", "long"), col("l", "Likelihood (1–3)", "select", ["1", "2", "3"]), col("i", "Impact (1–3)", "select", ["1", "2", "3"]), col("plan", "Plan B", "long"), col("owner", "Owner", "text"), col("status", "Status", "select", ["Open", "Mitigated", "Closed"])] },
@@ -41,7 +41,7 @@ var TABLES = {
                   cols: [col("date", "Date", "date"), col("city", "City", "text"), col("venue", "Venue", "text"), col("deal", "Deal", "text"), col("contact", "Contact", "text"), col("status", "Status", "select", ["Pitched", "Hold", "Confirmed", "Done"])] },
     donors:     { t: "Donors & pledges", lead: "Every ask, from first contact to the thank-you.",
                   cols: [col("name", "Donor", "text"), col("amount", "Amount", "money"), col("status", "Status", "select", ["Prospect", "Asked", "Pledged", "Received", "Thanked"]), col("notes", "Notes", "text")] },
-    debrief:    { t: "Debrief", lead: "Within a week of the night: what worked, what didn't, what we change next time.",
+    debrief:    { t: "Debrief", lead: "Within a week of the event: what worked, what didn't, what we change next time.",
                   cols: [col("topic", "Topic", "text"), col("worked", "What worked", "long"), col("change", "Change next time", "long"), col("owner", "Owner", "text")] }
 }
 
@@ -72,7 +72,7 @@ var MOD_ORDER = ["brief", "timeline", "team", "lineup", "crew", "budget", "ticke
 
 // ── formats ──
 var M = function (t, task) { return { t: t, task: task } }
-var CORE_MILESTONES = [M(42, "Confirm date and venue (hold → confirmed)"), M(35, "Book headliner / main act"), M(28, "Announce the night"),
+var CORE_MILESTONES = [M(42, "Confirm date and venue (hold → confirmed)"), M(35, "Book headliner / main act"), M(28, "Announce the event"),
                        M(21, "Full line-up confirmed"), M(14, "Line-up reveal and tickets live"), M(7, "Tech rider to venue, crew confirmed"),
                        M(3, "Run of show shared with crew"), M(1, "Guest list closed, cash float ready"), M(-2, "Pay artists and suppliers"), M(-7, "Debrief and thank-yous")]
 var FORMATS = {
@@ -96,7 +96,7 @@ var FORMATS = {
                  rows: { venue: ["Site plan and capacity", "Power and generators", "Toilets and water", "First aid", "Waste and recycling", "Accessibility route and viewing area"],
                          ros: [["08:00", "Build"], ["12:00", "Gates"], ["23:00", "Last act"], ["00:00", "Site clear"]],
                          risks: [["Bad weather", "2", "3", "Covered areas, wet-weather plan, cancellation threshold"], ["Crowd crush at a stage", "1", "3", "Barriers, stewards, capacity per area"], ["Permit refused", "1", "3", "Apply early, plan B site"]] } },
-    residency: { label: "Residency / series", blurb: "The same night every week or month",
+    residency: { label: "Residency / series", blurb: "The same event every week or month",
                  modules: ["brief", "timeline", "team", "lineup", "budget", "sessions", "comms", "ros", "debrief"],
                  milestones: [M(21, "Book this edition's guests"), M(14, "Announce"), M(7, "Poster and posts out"), M(1, "Confirm crew"), M(-3, "Pay out, note attendance")],
                  rows: { ros: [["22:00", "Doors"], ["23:00", "Resident"], ["01:00", "Guest"], ["04:00", "Close"]] } },
@@ -108,7 +108,7 @@ var FORMATS = {
                  modules: ["brief", "timeline", "team", "lineup", "budget", "tickets", "venue", "hospitality", "comms", "gear", "ros", "debrief"],
                  milestones: [M(28, "Facilitator confirmed, fee agreed"), M(21, "Sign-ups open"), M(7, "Materials and equipment list"), M(2, "Reminder to participants"), M(-3, "Feedback form sent")],
                  rows: { venue: ["Tables, chairs, power strips", "Projector and screen", "Materials"], ros: [["18:30", "Set up"], ["19:00", "Welcome"], ["19:15", "Session"], ["21:00", "Wrap"]] } },
-    fundraiser:{ label: "Fundraiser / benefit", blurb: "A night that raises money for a cause",
+    fundraiser:{ label: "Fundraiser / benefit", blurb: "An event that raises money for a cause",
                  modules: ["brief", "timeline", "team", "lineup", "budget", "tickets", "donors", "venue", "comms", "ros", "risks", "debrief"],
                  milestones: CORE_MILESTONES.concat([M(30, "Cause, target and where the money goes, agreed"), M(-14, "Report what was raised")]),
                  rows: { risks: [["Takings handled badly", "1", "3", "Two people count, receipts, a shared sheet"]] } },

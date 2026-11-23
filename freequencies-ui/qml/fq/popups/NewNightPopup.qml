@@ -21,7 +21,7 @@ Win {
     property bool free: false
     property string age: ""
     property string status: "Hold"
-    title: "new_night.exe"
+    title: "new_event.exe"
     width: Math.min(560, (parent ? parent.width : 560) - 40)
 
     function pad(n) { return (n < 10 ? "0" : "") + n }
@@ -58,7 +58,7 @@ Win {
                     delegate: Chip { required property var modelData; text: modelData.name || "calendar"; on: nn.calId === modelData.id; onClicked: nn.calId = modelData.id } } }
 
             Label_ { text: "NAME" }
-            Field { id: titleIn; objectName: "nnTitle"; Layout.fillWidth: true; placeholderText: "What's the night called?"; onAccepted: nn.save() }
+            Field { id: titleIn; objectName: "nnTitle"; Layout.fillWidth: true; placeholderText: "What's the event called?"; onAccepted: nn.save() }
 
             RowLayout {
                 Layout.fillWidth: true; spacing: 8
@@ -77,7 +77,7 @@ Win {
             Field { id: lineupIn; Layout.fillWidth: true; placeholderText: "Names, separated by commas (optional)" }
             FText { readonly property var names: Details.parseLineup(lineupIn.text)
                 visible: names.length > 0; Layout.fillWidth: true; wrapMode: Text.Wrap; color: Fq.faint; font.pixelSize: 12
-                text: names.length + (names.length === 1 ? " artist" : " artists") + ", added as asked. Set fees and times in the night panel." }
+                text: names.length + (names.length === 1 ? " artist" : " artists") + ", added as asked. Set fees and times in the event panel." }
 
             Link { text: nn.more ? "− fewer details" : "+ more details (kind, audience, tickets, access…)"; tone: Fq.acid; Layout.topMargin: 4; onClicked: nn.more = !nn.more }
 
@@ -121,6 +121,6 @@ Win {
         Link { text: "full editor"; tone: Fq.faint; onClicked: { nn.close(); nn.app.openNewEvent() } }
         Item { Layout.fillWidth: true }
         FqButton { text: "Cancel"; onClicked: nn.close() }
-        FqButton { objectName: "nnAdd"; text: nn.app && nn.app.quickBusy ? "Adding…" : "Add night"; primary: true; enabled: !(nn.app && nn.app.quickBusy); onClicked: nn.save() }
+        FqButton { objectName: "nnAdd"; text: nn.app && nn.app.quickBusy ? "Adding…" : "Add event"; primary: true; enabled: !(nn.app && nn.app.quickBusy); onClicked: nn.save() }
     }
 }
