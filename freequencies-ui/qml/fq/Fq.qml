@@ -3,6 +3,8 @@
 // (cBase, cBlue, …) point here, so Scala's code keeps working unchanged.
 pragma Singleton
 import QtQuick
+import QtCore
+import "lib/i18n.js" as I18n
 
 QtObject {
     // ground and surfaces: a terminal, ruled in dark green
@@ -37,4 +39,21 @@ QtObject {
     property FontLoader ft88Loader: FontLoader { source: "../fonts/FT88-Serif.otf" }
     readonly property string display: bebasLoader.status === FontLoader.Ready ? bebasLoader.font.family : "Impact"
     readonly property string body: ft88Loader.status === FontLoader.Ready ? ft88Loader.font.family : "monospace"
+
+    // ── language: English or European Portuguese (lib/i18n.js), switched top right, remembered ──
+    property Settings langStore: Settings { category: "freequencies"; property string lang: "en" }
+    readonly property string lang: langStore.lang
+    function setLang(l) { langStore.lang = (l === "pt" ? "pt" : "en") }
+    // t("Save") / t("%1 events", [n]): the text in the chosen language. Bindings that call it
+    // re-evaluate when the language changes (it reads `lang`).
+    function t(s, args) {
+        var out = (lang === "pt" && I18n.PT[s] !== undefined) ? I18n.PT[s] : s
+        if (args) for (var i = 0; i < args.length; i++) out = out.split("%" + (i + 1)).join(String(args[i]))
+        return out
+    }
+    // Dates and times with weekday / month names in the chosen language.
+    readonly property var loc: Qt.locale(lang === "pt" ? "pt_PT" : "en_GB")
+    function fmtDate(d, f) { var x = d instanceof Date ? d : new Date(d); return lang === "pt" ? x.toLocaleDateString(loc, f) : Qt.formatDate(x, f) }
+    function fmtDateTime(d, f) { var x = d instanceof Date ? d : new Date(d); return lang === "pt" ? x.toLocaleString(loc, f) : Qt.formatDateTime(x, f) }
+    function fmtTime(d, f) { var x = d instanceof Date ? d : new Date(d); return lang === "pt" ? x.toLocaleTimeString(loc, f) : Qt.formatTime(x, f) }
 }

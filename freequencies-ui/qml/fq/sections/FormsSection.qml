@@ -16,9 +16,9 @@ ColumnLayout {
     Layout.fillWidth: true; spacing: 6
     onNightChanged: if (fo.forms.length > 0) fo.app.loadWb()
 
-    Sec { label: "Forms (" + fo.forms.length + ")"; action: fo.canEdit ? "+ form" : ""; onAct: fo.addForm() }
+    Sec { label: Fq.t("Forms (") + fo.forms.length + ")"; action: fo.canEdit ? Fq.t("+ form") : ""; onAct: fo.addForm() }
     FText { visible: fo.forms.length === 0; Layout.fillWidth: true; wrapMode: Text.Wrap; color: Fq.sub; font.pixelSize: 12
-        text: "Artist bookings, crew sign-up, guest list or feedback: private forms, answers sealed for you." }
+        text: Fq.t("Artist bookings, crew sign-up, guest list or feedback: private forms, answers sealed for you.") }
     Repeater {
         model: fo.forms
         delegate: Rectangle {
@@ -33,9 +33,9 @@ ColumnLayout {
                 FText { Layout.fillWidth: true; elide: Text.ElideRight; color: Fq.sub; font.pixelSize: 12; text: Forms.formLine(fm.modelData, fm.sm, fo.app.wbState) }
                 Row {
                     spacing: 14
-                    Link { visible: fm.modelData.uri !== ""; text: "copy link"; onClicked: fo.app.copyText(fm.modelData.uri) }
-                    Link { visible: !!fm.sm && fm.sm.canRead === true; text: "answers"; onClicked: fo.openAnswers(fm.modelData) }
-                    Link { visible: (!!fo.cal && fm.modelData.author === fo.cal.authorAddr) || fo.app.isEditorOf(fo.cal); text: "remove"; tone: Fq.red
+                    Link { visible: fm.modelData.uri !== ""; text: Fq.t("copy link"); onClicked: fo.app.copyText(fm.modelData.uri) }
+                    Link { visible: !!fm.sm && fm.sm.canRead === true; text: Fq.t("answers"); onClicked: fo.openAnswers(fm.modelData) }
+                    Link { visible: (!!fo.cal && fm.modelData.author === fo.cal.authorAddr) || fo.app.isEditorOf(fo.cal); text: Fq.t("remove"); tone: Fq.red
                            onClicked: fo.app.deleteItem(fo.night, fm.modelData.id, "Form removed from this event. It stays in WhisperBox.") }
                 }
             }

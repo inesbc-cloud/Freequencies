@@ -58,67 +58,67 @@ Win {
             id: body
             width: parent.width; spacing: 7
 
-            Label_ { text: fp.kind === "fund-app" ? "PROJECT THAT WAS FUNDED" : "FUNDER OR CALL" }
-            Field { id: titleIn; Layout.fillWidth: true; placeholderText: fp.kind === "fund-app" ? "e.g. Noites Abertas 2025" : "e.g. DGArtes Apoio a Projetos" }
+            Label_ { text: fp.kind === "fund-app" ? Fq.t("PROJECT THAT WAS FUNDED") : Fq.t("FUNDER OR CALL") }
+            Field { id: titleIn; Layout.fillWidth: true; placeholderText: fp.kind === "fund-app" ? Fq.t("e.g. Noites Abertas 2025") : Fq.t("e.g. DGArtes Apoio a Projetos") }
 
             ColumnLayout {
                 visible: fp.kind === "fund-app"; Layout.fillWidth: true; spacing: 7
                 RowLayout {
                     Layout.fillWidth: true; spacing: 8
-                    ColumnLayout { Layout.fillWidth: true; spacing: 4; Label_ { text: "FUNDED BY" } Field { id: funderIn; Layout.fillWidth: true; placeholderText: "Funder" } }
-                    ColumnLayout { spacing: 4; Label_ { text: "YEAR" } Field { id: yearIn; Layout.preferredWidth: 80; placeholderText: "2025" } }
+                    ColumnLayout { Layout.fillWidth: true; spacing: 4; Label_ { text: Fq.t("FUNDED BY") } Field { id: funderIn; Layout.fillWidth: true; placeholderText: Fq.t("Funder") } }
+                    ColumnLayout { spacing: 4; Label_ { text: Fq.t("YEAR") } Field { id: yearIn; Layout.preferredWidth: 80; placeholderText: "2025" } }
                 }
-                Label_ { text: "WHO APPLIED (OPTIONAL)" }
-                Field { id: applicantIn; Layout.fillWidth: true; placeholderText: "Collective or person" }
+                Label_ { text: Fq.t("WHO APPLIED (OPTIONAL)") }
+                Field { id: applicantIn; Layout.fillWidth: true; placeholderText: Fq.t("Collective or person") }
             }
 
             RowLayout {
                 Layout.fillWidth: true; spacing: 8
                 ColumnLayout { Layout.fillWidth: true; spacing: 4
-                    Label_ { text: fp.kind === "fund-app" ? "AMOUNT AWARDED" : "AMOUNT (OPTIONAL)" }
-                    Field { id: amountIn; Layout.fillWidth: true; placeholderText: fp.kind === "fund-app" ? "15000" : "up to 20 000 EUR" } }
-                ColumnLayout { visible: fp.kind === "fund-app"; spacing: 4; Label_ { text: "CURRENCY" } Field { id: curIn; Layout.preferredWidth: 70 } }
-                ColumnLayout { visible: fp.kind === "fund-link"; spacing: 4; Label_ { text: "DEADLINE" } Field { id: deadlineIn; Layout.preferredWidth: 120; placeholderText: "2027-01-31" } }
+                    Label_ { text: fp.kind === "fund-app" ? Fq.t("AMOUNT AWARDED") : Fq.t("AMOUNT (OPTIONAL)") }
+                    Field { id: amountIn; Layout.fillWidth: true; placeholderText: fp.kind === "fund-app" ? "15000" : Fq.t("up to 20 000 EUR") } }
+                ColumnLayout { visible: fp.kind === "fund-app"; spacing: 4; Label_ { text: Fq.t("CURRENCY") } Field { id: curIn; Layout.preferredWidth: 70 } }
+                ColumnLayout { visible: fp.kind === "fund-link"; spacing: 4; Label_ { text: Fq.t("DEADLINE") } Field { id: deadlineIn; Layout.preferredWidth: 120; placeholderText: "2027-01-31" } }
             }
             Flow { visible: fp.kind === "fund-link"; Layout.fillWidth: true; spacing: 6
-                Chip { text: "Rolling / always open"; on: fp.rolling; onClicked: fp.rolling = !fp.rolling } }
+                Chip { text: Fq.t("Rolling / always open"); on: fp.rolling; onClicked: fp.rolling = !fp.rolling } }
 
-            Label_ { text: "AREA" }
+            Label_ { text: Fq.t("AREA") }
             Flow { Layout.fillWidth: true; spacing: 6
                 Repeater { model: Funding.areas
-                    delegate: Chip { required property var modelData; text: modelData; on: fp.area === modelData; onClicked: fp.area = on ? "" : modelData } } }
+                    delegate: Chip { required property var modelData; text: Fq.t(modelData); on: fp.area === modelData; onClicked: fp.area = on ? "" : modelData } } }
 
-            Label_ { text: fp.kind === "fund-app" ? "LINK (OPTIONAL)" : "LINK" }
+            Label_ { text: fp.kind === "fund-app" ? Fq.t("LINK (OPTIONAL)") : Fq.t("LINK") }
             Field { id: urlIn; Layout.fillWidth: true; placeholderText: "https://" }
 
             ColumnLayout {
                 visible: fp.kind === "fund-app"; Layout.fillWidth: true; spacing: 5
-                Label_ { text: "DOCUMENTS (" + fp.allDocs.length + ")" }
+                Label_ { text: Fq.t("DOCUMENTS (") + fp.allDocs.length + ")" }
                 Repeater { model: fp.allDocs
                     delegate: RowLayout { required property var modelData; Layout.fillWidth: true; spacing: 8
                         FText { Layout.fillWidth: true; elide: Text.ElideMiddle; font.pixelSize: 13; text: modelData.name }
-                        Link { text: "remove"; tone: Fq.red; onClicked: fp.removeDoc(modelData.cid) } } }
+                        Link { text: Fq.t("remove"); tone: Fq.red; onClicked: fp.removeDoc(modelData.cid) } } }
                 RowLayout {
                     Layout.fillWidth: true; spacing: 8
-                    FqButton { text: fp.app && fp.app.attachBusy ? "Uploading…" : "+ Attach document"; enabled: !(fp.app && fp.app.attachBusy); onClicked: docDialog.open() }
+                    FqButton { text: fp.app && fp.app.attachBusy ? Fq.t("Uploading…") : Fq.t("+ Attach document"); enabled: !(fp.app && fp.app.attachBusy); onClicked: docDialog.open() }
                     FText { Layout.fillWidth: true; wrapMode: Text.Wrap; color: Fq.faint; font.pixelSize: 11
-                        text: "The application, budget, report… Sealed in Logos Storage: only library members can open them." }
+                        text: Fq.t("The application, budget, report… Sealed in Logos Storage: only library members can open them.") }
                 }
                 FText { visible: !!fp.app && fp.app.attachMsg !== "" && fp.app.fundingAnchor && fp.app.attachNightId === fp.app.fundingAnchor.id
                     Layout.fillWidth: true; wrapMode: Text.Wrap; color: Fq.warn; font.pixelSize: 12; text: fp.app ? fp.app.attachMsg : "" }
             }
 
-            Label_ { text: fp.kind === "fund-app" ? "WHAT WORKED / NOTES" : "NOTES" }
-            Field { id: notesIn; Layout.fillWidth: true; placeholderText: fp.kind === "fund-app" ? "Tips for the next applicant" : "Who it's for, what they fund" }
+            Label_ { text: fp.kind === "fund-app" ? Fq.t("WHAT WORKED / NOTES") : Fq.t("NOTES") }
+            Field { id: notesIn; Layout.fillWidth: true; placeholderText: fp.kind === "fund-app" ? Fq.t("Tips for the next applicant") : Fq.t("Who it's for, what they fund") }
         }
     }
 
     RowLayout {
         Layout.fillWidth: true; Layout.topMargin: 8; spacing: 8
-        FqButton { visible: fp.id_ !== ""; text: "Remove"; onClicked: fp.app.deleteFunding(fp.id_, "Removed", function (ok) { if (ok) fp.close() }) }
+        FqButton { visible: fp.id_ !== ""; text: Fq.t("Remove"); onClicked: fp.app.deleteFunding(fp.id_, Fq.t("Removed"), function (ok) { if (ok) fp.close() }) }
         Item { Layout.fillWidth: true }
-        FqButton { text: "Cancel"; onClicked: fp.close() }
-        FqButton { text: fp.id_ ? "Save" : "Add"; primary: true; enabled: !(fp.app && (fp.app.extBusy || fp.app.attachBusy)); onClicked: fp.save() }
+        FqButton { text: Fq.t("Cancel"); onClicked: fp.close() }
+        FqButton { text: fp.id_ ? Fq.t("Save") : "Add"; primary: true; enabled: !(fp.app && (fp.app.extBusy || fp.app.attachBusy)); onClicked: fp.save() }
     }
-    FileDialog { id: docDialog; title: "Attach a document"; onAccepted: fp.app.uploadToFunding(docDialog.selectedFile) }
+    FileDialog { id: docDialog; title: Fq.t("Attach a document"); onAccepted: fp.app.uploadToFunding(docDialog.selectedFile) }
 }

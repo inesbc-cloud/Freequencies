@@ -11,8 +11,8 @@ ColumnLayout {
     property bool canEdit: false
     signal change()
     Layout.fillWidth: true; spacing: 6
-    Sec { label: "Poster"; action: ps.canEdit ? (Poster.posterOf(ps.night) ? "change" : "+ set") : ""; onAct: ps.change() }
+    Sec { label: Fq.t("Poster"); action: ps.canEdit ? (Poster.posterOf(ps.night) ? "change" : Fq.t("+ set")) : ""; onAct: ps.change() }
     FText { Layout.fillWidth: true; wrapMode: Text.Wrap; color: Fq.sub; font.pixelSize: 12
-        text: Poster.posterOf(ps.night) ? (ps.app.posterSrc(ps.night) ? "Shows on the calendar, the timeline and at the top of this panel." : "Fetching it from Logos Storage…")
+        text: Poster.posterOf(ps.night) ? (ps.app.posterSrc(ps.night) ? Fq.t("Shows on the calendar, the timeline and at the top of this panel.") : Fq.t("Fetching it from Logos Storage…"))
               : "Pick an image file attached to the event, or paste an image link." }
 }

@@ -234,8 +234,9 @@ Item {
 
     readonly property var fieldTypes: ["text","longtext","number","date","datetime","bool","url","enum","color"]
 
-    readonly property var monthNames: ["January","February","March","April","May","June","July","August","September","October","November","December"]
-    readonly property var weekDays: ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"]
+    readonly property var monthNames: Fq.lang === "pt" ? ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"]
+                                                        : ["January","February","March","April","May","June","July","August","September","October","November","December"]
+    readonly property var weekDays: Fq.lang === "pt" ? ["Seg","Ter","Qua","Qui","Sex","Sáb","Dom"] : ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"]
 
     // ── Freequencies tokens (fq/Fq.qml). Scala's colour names kept, so Scala's code reads the same. ──
     readonly property color cBase:    Fq.ground    // app background
@@ -381,7 +382,7 @@ Item {
             var fresh = root.j(raw, null)
             if (!fresh || typeof fresh !== "object" || fresh.id !== night.id) {
                 root.nightSaving = false
-                root.notify("Couldn't load the event to change it. It may have been deleted.", true); root.refresh(); return
+                root.notify(Fq.t("Couldn't load the event to change it. It may have been deleted."), true); root.refresh(); return
             }
             var up = JSON.parse(JSON.stringify(fresh))
             delete up.seriesId; delete up.occ; delete up.ext; delete up.rsvps
@@ -391,7 +392,7 @@ Item {
             root.coreAsync("updateEvent", [JSON.stringify(up)], function (r) {
                 root.nightSaving = false
                 if (root.unq(r) === night.id || String(root.j(r, "")) === night.id) { if (okMsg) root.notify(okMsg); root.refresh() }
-                else root.notify("Couldn't save the change. You may not have edit rights on this calendar.", true)
+                else root.notify(Fq.t("Couldn't save the change. You may not have edit rights on this calendar."), true)
             })
         })
     }
@@ -405,7 +406,7 @@ Item {
             root.extBusy = false
             var res = root.j(r, {}), ok = !!(res && res.ok)
             if (ok) { if (okMsg) root.notify(okMsg); root.refresh() }
-            else root.notify("Couldn't save" + (res && res.error ? ": " + res.error : ". Only the person who added it can change it, and the ‘scala’ package must be 0.12.0+."), true)
+            else root.notify(Fq.t("Couldn't save") + (res && res.error ? ": " + res.error : Fq.t(". Only the person who added it can change it, and the ‘scala’ package must be 0.12.0+.")), true)
             if (cb) cb(ok, res)
         })
     }
@@ -413,7 +414,7 @@ Item {
         if (!night || !id) return
         root.coreAsync("deleteExt", [night.calendarId, id], function (r) {
             var res = root.j(r, {}), ok = !!(res && res.ok)
-            if (ok) { if (okMsg) root.notify(okMsg); root.refresh() } else root.notify("Couldn't remove it. Only the person who added it, or an editor, can.", true)
+            if (ok) { if (okMsg) root.notify(okMsg); root.refresh() } else root.notify(Fq.t("Couldn't remove it. Only the person who added it, or an editor, can."), true)
             if (cb) cb(ok)
         })
     }
@@ -436,18 +437,18 @@ Item {
     property bool planBusy: false
     // Start a plan from a format: the plan item, then the template's rows (one ext item each).
     function createPlan(night, format) {
-        var s = Production.seedPlan(format)
+        var s = Production.seedPlan(format, Fq.t)
         if (!night || !s || root.planBusy) return
         root.planBusy = true
         root.putLatest(night, "prod-plan", s.plan, "", null, function (ok) {
             if (!ok) { root.planBusy = false; return }
             var left = s.rows.length
-            if (!left) { root.planBusy = false; root.notify("Plan ready"); return }
+            if (!left) { root.planBusy = false; root.notify(Fq.t("Plan ready")); return }
             for (var i = 0; i < s.rows.length; i++) {
                 var r = s.rows[i], id = Production.newRowId(r.table)
                 var it = Ext.item("prod-row", night.id, Production.rowData(r.table, id, r.order, r.cells), "prod-row:" + Ext.rnd())
                 root.coreAsync("postExt", [night.calendarId, JSON.stringify(it)], function () {
-                    if (--left === 0) { root.planBusy = false; root.notify("Plan ready: " + Production.FORMATS[format].label); root.refresh() }
+                    if (--left === 0) { root.planBusy = false; root.notify(Fq.t("Plan ready: ") + Fq.t(Production.FORMATS[format].label)); root.refresh() }
                 })
             }
         })
@@ -472,13 +473,13 @@ Item {
     function planCampaign(night, names) {
         if (!night || root.campaignBusy) return
         var posts = Promo.campaign(night, names, Checklist.postsOf(night))
-        if (!posts.length) { root.notify("The campaign is already in the planner."); return }
+        if (!posts.length) { root.notify(Fq.t("The campaign is already in the planner.")); return }
         root.campaignBusy = true
         var left = posts.length
         for (var i = 0; i < posts.length; i++) {
             var it = Ext.item("post", night.id, posts[i], "post:" + Ext.rnd())
             root.coreAsync("postExt", [night.calendarId, JSON.stringify(it)], function () {
-                if (--left === 0) { root.campaignBusy = false; root.notify(posts.length + " posts planned"); root.refresh() }
+                if (--left === 0) { root.campaignBusy = false; root.notify(posts.length + Fq.t(" posts planned")); root.refresh() }
             })
         }
     }
@@ -492,11 +493,11 @@ Item {
         root.lisboaBusy = true
         root.coreAsync("createCalendar", ["Lisboa", "#6ef600", root.appearArg(root.newCalAppear, root.createDefaultOwner)], function (r) {
             var id = root.unq(r) || String(root.j(r, "") || "")
-            if (!id) { root.lisboaBusy = false; root.notify("Couldn't create the Lisboa calendar.", true); return }
+            if (!id) { root.lisboaBusy = false; root.notify(Fq.t("Couldn't create the Lisboa calendar."), true); return }
             var meta = { schema: Listings.withField(Nights.adoptedSchema([]), Listings.communityField), open: true, collab: false,
                          description: "Lisbon's independent culture, from every collective using Freequencies. Add your public events; you edit your own." }
             root.coreAsync("updateCalendarMeta", [id, JSON.stringify(meta)], function () {
-                root.lisboaBusy = false; root.notify("Lisboa calendar ready. Copy its join link so every install joins it."); root.refresh()
+                root.lisboaBusy = false; root.notify(Fq.t("Lisboa calendar ready. Copy its join link so every install joins it.")); root.refresh()
             })
         })
     }
@@ -552,6 +553,8 @@ Item {
             })
         })(cs[i])
     }
+
+    function setLang(l) { Fq.setLang(l) }     // the EN | PT switch (also used by the preview)
 
     // ── sections of the app: home · calendar (month/week/…/venues/analytics/funding) · production ──
     property string section: "home"
@@ -622,12 +625,12 @@ Item {
     // A form from WhisperBox's shared templates (templates.js, the same as Android's), titled for the night.
     function addForm(night, occ, purpose, cb) {
         if (!night || root.formBusy) return
-        var when = Qt.formatDate(new Date((occ || night).startTime), "d MMM")
-        var def = Tpl.template(purpose, { title: Forms.purposeLabel(purpose) + ": " + (night.title || "our event") + " (" + when + ")" })
+        var when = Fq.fmtDate(new Date((occ || night).startTime), "d MMM")
+        var def = Tpl.template(purpose, { title: Forms.purposeLabel(purpose) + ": " + (night.title || Fq.t("our event")) + " (" + when + ")" })
         root.formBusy = true
         root.wb("createForm", [JSON.stringify(def)], function (r) {
             var res = root.j(r, {})
-            if (!res || !res.ok || !res.formId) { root.formBusy = false; root.notify("Couldn't create the form" + (res && res.error ? ": " + res.error : ". Is the ‘whisperbox_core’ package installed?"), true); if (cb) cb(false); return }
+            if (!res || !res.ok || !res.formId) { root.formBusy = false; root.notify(Fq.t("Couldn't create the form") + (res && res.error ? ": " + res.error : Fq.t(". Is the ‘whisperbox_core’ package installed?")), true); if (cb) cb(false); return }
             var fid = String(res.formId)
             root.wb("shareUri", [fid], function (r2) {
                 var su = root.j(r2, {}), uri = (su && su.ok && su.uri) ? String(su.uri) : ""
@@ -637,7 +640,7 @@ Item {
             })
         })
     }
-    function copyText(t) { fqClip.text = t; fqClip.selectAll(); fqClip.copy(); root.notify("Link copied") }
+    function copyText(t) { fqClip.text = t; fqClip.selectAll(); fqClip.copy(); root.notify(Fq.t("Link copied")) }
     TextEdit { id: fqClip; visible: false }
     // ── public copies (#21, ADR 0008): after every refresh, bring each published night's copy up to
     // date (fq/lib/publiccopy.js, identical to Android's). Only owners/editors of the public calendar write.
@@ -675,7 +678,7 @@ Item {
         var cal = night ? root.calById(night.calendarId) : null
         root.coreAsync("createCalendar", [((cal && cal.name) || "Our events") + " (public)", (cal && cal.color) || "#6ef600", ""], function (r) {
             var id = root.unq(r) || String(root.j(r, "") || "")
-            if (!id) { root.notify("Couldn't create the calendar.", true); cb(""); return }
+            if (!id) { root.notify(Fq.t("Couldn't create the calendar."), true); cb(""); return }
             root.coreAsync("updateCalendarMeta", [id, JSON.stringify({ open: false, description: "What's on. Published from Freequencies." })], function () { cb(id) })
         })
     }
@@ -687,11 +690,11 @@ Item {
         root.dupBusy = true
         root.coreAsync("createEvent", [night.calendarId, JSON.stringify(c.event)], function (r) {
             var id = root.unq(r) || String(root.j(r, "") || "")
-            if (!id) { root.dupBusy = false; root.notify("Couldn't duplicate the event.", true); return }
+            if (!id) { root.dupBusy = false; root.notify(Fq.t("Couldn't duplicate the event."), true); return }
             var left = c.items.length
             function done() {
                 root.dupBusy = false
-                root.notify("Duplicated to " + Qt.formatDate(new Date(c.event.startTime), "ddd d MMM") + " as a Hold")
+                root.notify(Fq.t("Duplicated to ") + Fq.fmtDate(new Date(c.event.startTime), "ddd d MMM") + Fq.t(" as a Hold"))
                 root.refresh()
                 var d = new Date(c.event.startTime); root.selectedDay = d; root.viewMonth = d
                 root.selectedNight = { id: id, seriesId: id, occ: c.event.startTime, calendarId: night.calendarId, startTime: c.event.startTime, endTime: c.event.endTime }
@@ -706,7 +709,7 @@ Item {
     function copyInvite(calId, role) {
         root.coreAsync("createInvite", [calId, role], function (r) {
             var res = root.j(r, {})
-            if (res && res.ok && res.link) root.copyText(String(res.link)); else root.notify("Couldn't make a link" + (res && res.error ? ": " + res.error : "."), true)
+            if (res && res.ok && res.link) root.copyText(String(res.link)); else root.notify(Fq.t("Couldn't make a link") + (res && res.error ? ": " + res.error : "."), true)
         })
     }
     // ── quick new night: name, date, venue, times, line-up (+ optional details) ──
@@ -724,12 +727,12 @@ Item {
         root.quickBusy = true
         root.coreAsync("createEvent", [calId, JSON.stringify(r.event)], function (res) {
             var id = root.unq(res) || String(root.j(res, "") || "")
-            if (!id) { root.quickBusy = false; root.notify("Couldn't add the event. You may not be able to add to this calendar.", true); return }
+            if (!id) { root.quickBusy = false; root.notify(Fq.t("Couldn't add the event. You may not be able to add to this calendar."), true); return }
             root.lastCalId = calId
             var left = r.items.length
             function done() {
                 root.quickBusy = false
-                root.notify("Added “" + r.event.title + "” on " + Qt.formatDate(new Date(r.event.startTime), "ddd d MMM"))
+                root.notify(Fq.t("Added “") + r.event.title + Fq.t("” on ") + Fq.fmtDate(new Date(r.event.startTime), "ddd d MMM"))
                 root.refresh()
                 var d = new Date(r.event.startTime); root.selectedDay = d; root.viewMonth = d
                 root.selectedNight = { id: id, seriesId: id, occ: r.event.startTime, calendarId: calId, startTime: r.event.startTime, endTime: r.event.endTime }
@@ -762,20 +765,20 @@ Item {
         root.fundingBusy = true
         function anchor(calId) {
             root.coreAsync("createEvent", [calId, JSON.stringify(Funding.anchorEvent())], function () {
-                root.fundingBusy = false; root.notify("Funding library ready. Share it with your collective from the Funding tab."); root.refresh()
+                root.fundingBusy = false; root.notify(Fq.t("Funding library ready. Share it with your collective from the Funding tab.")); root.refresh()
             })
         }
         if (root.fundingCal) { anchor(root.fundingCal.id); return }   // calendar there, anchor missing
         root.coreAsync("createCalendar", ["Funding library", "#c6ff00", root.appearArg(root.newCalAppear, root.createDefaultOwner)], function (r) {
             var id = root.unq(r) || String(root.j(r, "") || "")
-            if (!id) { root.fundingBusy = false; root.notify("Couldn't create the funding library.", true); return }
+            if (!id) { root.fundingBusy = false; root.notify(Fq.t("Couldn't create the funding library."), true); return }
             var meta = { schema: Funding.fundingSchema([]), open: true, collab: true, description: "Freequencies funding library: winning applications and links to funding." }
             root.coreAsync("updateCalendarMeta", [id, JSON.stringify(meta)], function () { anchor(id) })
         })
     }
     function postFunding(item, okMsg, cb) {
         var a = root.fundingAnchor
-        if (!a) { root.notify("Set up the funding library first.", true); return }
+        if (!a) { root.notify(Fq.t("Set up the funding library first."), true); return }
         item.target = a.id
         root.postItem(a, item, okMsg, cb)
     }
@@ -805,20 +808,20 @@ Item {
     property string laneBy: "venue"                       // "venue" | "status" | "calendar"
     function boardLabel(d) {
         var a = new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() + 6) % 7)), b = new Date(a.getFullYear(), a.getMonth(), a.getDate() + 13)
-        return Qt.formatDate(a, "d MMM") + " – " + Qt.formatDate(b, "d MMM yyyy")
+        return Fq.fmtDate(a, "d MMM") + " – " + Fq.fmtDate(b, "d MMM yyyy")
     }
     // Dropped on the board: move to that day (time of day kept) and, for venue / status lanes, set it.
     function moveNightTo(occ, day, by, laneId) {
         var night = root.eventById(occ.seriesId || occ.id)
         if (!night) return
-        if (!root.canEditNight(night)) { root.notify("You can't move events on this calendar.", true); return }
+        if (!root.canEditNight(night)) { root.notify(Fq.t("You can't move events on this calendar."), true); return }
         var setField = (by === "venue" || by === "status") && laneId !== "—" && laneId !== Nights.fieldOf(night, by)
-        if (by === "calendar" && laneId !== night.calendarId) root.notify("Events can't move between calendars: duplicate it there instead.", true)
+        if (by === "calendar" && laneId !== night.calendarId) root.notify(Fq.t("Events can't move between calendars: duplicate it there instead."), true)
         if (!setField) { root.moveEventToDay(occ, day); return }
         var s = new Date(occ.startTime), ns = new Date(day.getFullYear(), day.getMonth(), day.getDate(), s.getHours(), s.getMinutes(), 0, 0)
         var shift = ns.getTime() - occ.startTime
         root.editNight(night, function (up) { up.startTime += shift; up.endTime = (up.endTime || up.startTime) + shift; up.fields[by] = laneId },
-                       "Moved to " + Qt.formatDate(ns, "ddd d MMM") + " · " + laneId)
+                       "Moved to " + Fq.fmtDate(ns, "ddd d MMM") + " · " + laneId)
     }
     // Occurrences on a day, from the cached month expansion (month cells).
     function nightsOnDay(d) {
@@ -879,8 +882,8 @@ Item {
         root.coreAsync("updateCalendarMeta", [c.id, JSON.stringify({ schema: Nights.adoptedSchema(c.schema) })], function (r) {
             if (root.j(r, false) === true || String(r) === "true") {
                 var o = {}; for (var k in root.shownOthers) o[k] = root.shownOthers[k]; delete o[c.id]; root.shownOthers = o
-                root.notify("“" + (c.name || "Calendar") + "” now uses Freequencies fields"); root.refresh()
-            } else root.notify("Couldn't update “" + (c.name || "the calendar") + "”. Only its owner or editors can change its fields.", true)
+                root.notify("“" + (c.name || Fq.t("Calendar")) + Fq.t("” now uses Freequencies fields")); root.refresh()
+            } else root.notify(Fq.t("Couldn't update “") + (c.name || Fq.t("the calendar")) + Fq.t("”. Only its owner or editors can change its fields."), true)
         })
     }
 
@@ -1020,7 +1023,7 @@ Item {
             if (sameDay(new Date(occ[i].startTime), d)) cols.push(evColor(occ[i]))
         return cols
     }
-    function fmtTime(ms) { return Qt.formatTime(new Date(ms), "hh:mm") }
+    function fmtTime(ms) { return Fq.fmtTime(new Date(ms), "hh:mm") }
     // Custom-field values as badges (status/type/tags) — skip empty + long, cap at 4.
     function fieldValues(ev) {
         var out = []
@@ -1034,8 +1037,8 @@ Item {
     property string rangeId: "next90"
     property bool rangePicked: false      // until picked, a search covers ±1 year
     readonly property var ranges: [
-        { id: "next7", label: "Next 7 days" }, { id: "next30", label: "Next 30 days" }, { id: "next90", label: "Next 90 days" },
-        { id: "past30", label: "Past 30 days" }, { id: "year", label: "This year" }, { id: "all", label: "±1 year" }]
+        { id: "next7", label: Fq.t("Next 7 days") }, { id: "next30", label: Fq.t("Next 30 days") }, { id: "next90", label: Fq.t("Next 90 days") },
+        { id: "past30", label: Fq.t("Past 30 days") }, { id: "year", label: Fq.t("This year") }, { id: "all", label: Fq.t("±1 year") }]
     function filterChoices(cals, hidden) {
         var out = [], seen = {}
         function push(key, value, label) { var id = key + "\u0000" + value; if (seen[id]) return; seen[id] = true; out.push({ key: key, value: value, label: label }) }
@@ -1153,12 +1156,12 @@ Item {
             anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; leftMargin: 16; rightMargin: 16 }
             spacing: 1
             FText {
-                text: "⚠  Scala core is out of date" + (root.coreVer ? " (v" + root.coreVer + ")" : "")
+                text: Fq.t("⚠  Scala core is out of date") + (root.coreVer ? Fq.t(" (v") + root.coreVer + ")" : "")
                 color: root.cCrust; font.pixelSize: 14; font.weight: Theme.typography.weightMedium
             }
             FText {
                 Layout.fillWidth: true; wrapMode: Text.WordWrap
-                text: "Update the ‘scala’ package to " + root.minCore + "+ in Basecamp — until then, events may be signed with the wrong identity."
+                text: Fq.t("Update the ‘scala’ package to ") + root.minCore + Fq.t("+ in Basecamp — until then, events may be signed with the wrong identity.")
                 color: root.cCrust; font.pixelSize: 12
             }
         }
@@ -1206,7 +1209,7 @@ Item {
         }
         if (best) {
             root.soonText = (best.title || "(untitled)") + " starts " + root.soonLabel(best.startTime - now)
-                + (root.soonLabel(best.startTime - now) === "tomorrow" ? " at " + Qt.formatTime(new Date(best.startTime), "hh:mm") : "")
+                + (root.soonLabel(best.startTime - now) === "tomorrow" ? " at " + Fq.fmtTime(new Date(best.startTime), "hh:mm") : "")
             root.soonOcc = best
             root.soonVisible = true
         } else {
@@ -1251,15 +1254,27 @@ Item {
         overdue: Checklist.overdueCount(root.freqNights, root.nowTick)
         // the app's sections: one row of tabs, the calendar's own modes stay inside Calendar
         readonly property bool inCal: root.section === "calendar" && ["venues", "stats", "funding"].indexOf(root.calMode) < 0
-        FqButton { objectName: "tabHome"; text: "Home"; primary: root.section === "home"; onClicked: root.section = "home" }
-        FqButton { text: "Calendar"; primary: fqHeader.inCal; onClicked: root.showCalendar(["venues", "stats", "funding"].indexOf(root.calMode) >= 0 ? "month" : "") }
-        FqButton { objectName: "tabProduction"; text: "Production"; primary: root.section === "production"; onClicked: root.openProduction(null) }
-        FqButton { objectName: "tabPromo"; text: "Promo"; primary: root.section === "promo"; onClicked: root.section = "promo" }
-        FqButton { text: "Funding"; primary: root.section === "calendar" && root.calMode === "funding"; onClicked: root.showCalendar("funding") }
-        FqButton { text: "Venues"; primary: root.section === "calendar" && root.calMode === "venues"; onClicked: root.showCalendar("venues") }
-        FqButton { text: "Analytics"; primary: root.section === "calendar" && root.calMode === "stats"; onClicked: root.showCalendar("stats") }
-        Link { text: "debug"; tone: Fq.faint; onClicked: root.openDiag() }
-        FqButton { text: "+ Event"; primary: true; onClicked: root.openQuickNight() }
+        FqButton { objectName: "tabHome"; text: Fq.t("Home"); primary: root.section === "home"; onClicked: root.section = "home" }
+        FqButton { text: Fq.t("Calendar"); primary: fqHeader.inCal; onClicked: root.showCalendar(["venues", "stats", "funding"].indexOf(root.calMode) >= 0 ? "month" : "") }
+        FqButton { objectName: "tabProduction"; text: Fq.t("Production"); primary: root.section === "production"; onClicked: root.openProduction(null) }
+        FqButton { objectName: "tabPromo"; text: Fq.t("Promo"); primary: root.section === "promo"; onClicked: root.section = "promo" }
+        FqButton { text: Fq.t("Funding"); primary: root.section === "calendar" && root.calMode === "funding"; onClicked: root.showCalendar("funding") }
+        FqButton { text: Fq.t("Venues"); primary: root.section === "calendar" && root.calMode === "venues"; onClicked: root.showCalendar("venues") }
+        FqButton { text: Fq.t("Analytics"); primary: root.section === "calendar" && root.calMode === "stats"; onClicked: root.showCalendar("stats") }
+        FqButton { text: Fq.t("+ Event"); primary: true; onClicked: root.openQuickNight() }
+        Row {   // language: EN | PT (compact, top right)
+            spacing: 6
+            Repeater {
+                model: ["en", "pt"]
+                delegate: FText {
+                    required property var modelData
+                    objectName: "lang_" + modelData
+                    text: modelData.toUpperCase(); font.pixelSize: 13; font.bold: Fq.lang === modelData
+                    color: Fq.lang === modelData ? Fq.lime : Fq.faint; font.underline: lm.containsMouse
+                    MouseArea { id: lm; anchors.fill: parent; anchors.margins: -5; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: Fq.setLang(modelData) }
+                }
+            }
+        }
         anchors.top: soonBanner.bottom; anchors.left: parent.left; anchors.right: parent.right
     }
     // The quick new-night form (name, date, venue, times, line-up; more details optional).
@@ -1302,7 +1317,7 @@ Item {
                 anchors.margins: Theme.spacing.medium
                 spacing: Theme.spacing.small
 
-                DText { text: ("Calendars").toUpperCase(); color: root.cText; font.pixelSize: 30 }
+                DText { text: (Fq.t("Calendars")).toUpperCase(); color: root.cText; font.pixelSize: 30 }
 
                 Rectangle {
                     Layout.fillWidth: true; height: 36; radius: 0
@@ -1310,7 +1325,7 @@ Item {
                     RowLayout {
                         anchors.fill: parent; anchors.leftMargin: Theme.spacing.small; anchors.rightMargin: Theme.spacing.small; spacing: Theme.spacing.small
                         Rectangle { width: 10; height: 10; radius: 0; color: root.cFaint }
-                        FText { text: "All calendars"; color: root.cText; font.pixelSize: 14; Layout.fillWidth: true; elide: Text.ElideRight }
+                        FText { text: Fq.t("All calendars"); color: root.cText; font.pixelSize: 14; Layout.fillWidth: true; elide: Text.ElideRight }
                     }
                     MouseArea { id: allCalMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.filterCalId = "" }
                 }
@@ -1339,7 +1354,7 @@ Item {
                                 Layout.fillWidth: true; Layout.alignment: Qt.AlignVCenter; spacing: 1
                                 RowLayout {
                                     Layout.fillWidth: true; spacing: 4
-                                    FText { text: modelData.name || "(unnamed)"; color: root.calHidden(modelData.id) ? root.cSub : root.cText; font.pixelSize: 14; Layout.fillWidth: true; elide: Text.ElideRight }
+                                    FText { text: modelData.name || Fq.t("(unnamed)"); color: root.calHidden(modelData.id) ? root.cSub : root.cText; font.pixelSize: 14; Layout.fillWidth: true; elide: Text.ElideRight }
                                     // 🔑 = this calendar is signed with a Keycard, so every edit needs a card tap.
                                     FText { visible: root.calIsKeycard(modelData.id); text: "🔑"; font.pixelSize: 12; Layout.alignment: Qt.AlignVCenter }
                                 }
@@ -1354,7 +1369,7 @@ Item {
                                 MouseArea { anchors.fill: parent; anchors.margins: -4; cursorShape: Qt.PointingHandCursor; onClicked: root.openCalSettings(modelData) }
                             }
                             FText {
-                                text: "share"; color: root.cBlue; font.pixelSize: 12; Layout.alignment: Qt.AlignVCenter
+                                text: Fq.t("share"); color: root.cBlue; font.pixelSize: 12; Layout.alignment: Qt.AlignVCenter
                                 MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.openShare(modelData) }
                             }
                             FText {
@@ -1378,8 +1393,8 @@ Item {
                     Layout.fillWidth: true; Layout.topMargin: Theme.spacing.small; spacing: 6
                     RowLayout {
                         Layout.fillWidth: true
-                        FText { text: "Filter"; color: root.cFaint; font.pixelSize: 12; Layout.fillWidth: true }
-                        FText { visible: !!root.activeFilter; text: "clear"; color: root.cBlue; font.pixelSize: 12
+                        FText { text: Fq.t("Filter"); color: root.cFaint; font.pixelSize: 12; Layout.fillWidth: true }
+                        FText { visible: !!root.activeFilter; text: Fq.t("clear"); color: root.cBlue; font.pixelSize: 12
                             MouseArea { anchors.fill: parent; anchors.margins: -4; cursorShape: Qt.PointingHandCursor; onClicked: root.fieldFilter = null } }
                     }
                     Flow {
@@ -1392,7 +1407,7 @@ Item {
                             height: 26; radius: 0; width: Math.min(200, chipLblF.implicitWidth + 20)
                             color: on ? root.cSurface : "transparent"; border.width: 1; border.color: on ? root.cBlue : root.cSurface2
                             FText { id: chipLblF; textFormat: Text.PlainText; anchors.centerIn: parent; width: Math.min(implicitWidth, parent.width - 16); elide: Text.ElideRight
-                                text: modelData.label; color: parent.on ? root.cBlue : root.cSub; font.pixelSize: 12 }
+                                text: Fq.t(modelData.label); color: parent.on ? root.cBlue : root.cSub; font.pixelSize: 12 }
                             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.fieldFilter = parent.on ? null : { key: modelData.key, value: modelData.value } }
                         }
                         }
@@ -1402,21 +1417,21 @@ Item {
                 Rectangle {
                     Layout.fillWidth: true; implicitHeight: 40; radius: 0
                     color: newCalMA.containsMouse ? root.cSurface2 : root.cSurface
-                    FText { anchors.centerIn: parent; text: "+ New calendar"; color: root.cText; font.pixelSize: 14; font.weight: Theme.typography.weightMedium }
+                    FText { anchors.centerIn: parent; text: Fq.t("+ New calendar"); color: root.cText; font.pixelSize: 14; font.weight: Theme.typography.weightMedium }
                     MouseArea { id: newCalMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: newCalPopup.open() }
                 }
                 Rectangle {
                     Layout.fillWidth: true; implicitHeight: 40; radius: 0
                     color: joinMA.containsMouse ? root.cSurface : "transparent"
                     border.width: 1; border.color: root.cSurface2
-                    FText { anchors.centerIn: parent; text: "Join calendar"; color: root.cText; font.pixelSize: 14 }
+                    FText { anchors.centerIn: parent; text: Fq.t("Join calendar"); color: root.cText; font.pixelSize: 14 }
                     MouseArea { id: joinMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: joinPopup.open() }
                 }
                 Rectangle {
                     Layout.fillWidth: true; implicitHeight: 40; radius: 0
                     color: idsMA.containsMouse ? root.cSurface : "transparent"
                     border.width: 1; border.color: root.cSurface2
-                    FText { anchors.centerIn: parent; text: "👤 Identities"; color: root.cText; font.pixelSize: 14 }
+                    FText { anchors.centerIn: parent; text: Fq.t("👤 Identities"); color: root.cText; font.pixelSize: 14 }
                     MouseArea { id: idsMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { root.refreshIdentities(); identitiesPopup.open() } }
                 }
             }
@@ -1456,7 +1471,7 @@ Item {
                         : root.calMode === "venues" ? "Venues"
                         : root.calMode === "stats" ? "Analytics"
                         : root.calMode === "funding" ? "Funding"
-                        : root.calMode === "day" ? Qt.formatDate(root.selectedDay, "dddd, MMMM d")
+                        : root.calMode === "day" ? Fq.fmtDate(root.selectedDay, "dddd, MMMM d")
                         : root.monthNames[root.viewMonth.getMonth()] + " " + root.viewMonth.getFullYear()).toUpperCase()
                     color: root.cText; font.pixelSize: 34
                     Layout.leftMargin: 4
@@ -1472,7 +1487,7 @@ Item {
                             Rectangle {
                                 width: segT.implicitWidth + 18; height: 26; radius: 0
                                 color: root.calMode === modelData.m ? root.cBlue : "transparent"
-                                FText { id: segT; anchors.centerIn: parent; text: modelData.t
+                                FText { id: segT; anchors.centerIn: parent; text: Fq.t(modelData.t)
                                     color: root.calMode === modelData.m ? root.cCrust : root.cSub; font.pixelSize: 12 }
                                 MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.calMode = modelData.m }
                             }
@@ -1484,7 +1499,7 @@ Item {
                     color: todayMA.containsMouse ? root.cSurface : "transparent"
                     border.width: 1; border.color: root.cSurface2
                     Layout.leftMargin: 4
-                    FText { id: todayT; anchors.centerIn: parent; text: "Today"; color: root.cSub; font.pixelSize: 13 }
+                    FText { id: todayT; anchors.centerIn: parent; text: Fq.t("Today"); color: root.cSub; font.pixelSize: 13 }
                     MouseArea { id: todayMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                         onClicked: { var n = new Date(); root.viewMonth = n; root.selectedDay = n } }
                 }
@@ -1553,7 +1568,7 @@ Item {
                             }
                             FText {
                                 readonly property int n: root.nightsOnDay(cell.cellDate).length
-                                visible: n > cell.cap; text: "+" + (n - cell.cap + 1) + " more"; color: root.cAcid; font.pixelSize: 12
+                                visible: n > cell.cap; text: "+" + (n - cell.cap + 1) + Fq.t(" more"); color: root.cAcid; font.pixelSize: 12
                                 MouseArea { anchors.fill: parent; anchors.margins: -3; cursorShape: Qt.PointingHandCursor
                                     onClicked: { root.selectedDay = cell.cellDate; root.calMode = "week" } }
                             }
@@ -1674,7 +1689,7 @@ Item {
                             Row {
                                 id: adRow; anchors.verticalCenter: parent.verticalCenter; anchors.left: parent.left; anchors.leftMargin: 8; spacing: 6
                                 Rectangle { width: 3; height: 16; radius: 0; color: root.evColor(modelData); anchors.verticalCenter: parent.verticalCenter }
-                                FText { text: root.clashMark(modelData) + root.rsvpMark(modelData) + (modelData.title || "(untitled)"); color: root.myRsvpOf(modelData) === "no" ? root.cSub : root.cText; font.strikeout: root.myRsvpOf(modelData) === "no"; font.pixelSize: 12; anchors.verticalCenter: parent.verticalCenter }
+                                FText { text: root.clashMark(modelData) + root.rsvpMark(modelData) + (modelData.title || Fq.t("(untitled)")); color: root.myRsvpOf(modelData) === "no" ? root.cSub : root.cText; font.strikeout: root.myRsvpOf(modelData) === "no"; font.pixelSize: 12; anchors.verticalCenter: parent.verticalCenter }
                             }
                             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.openNight(modelData) }
                         }
@@ -1708,7 +1723,7 @@ Item {
                                                 id: evCol2
                                                 anchors.left: parent.left; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
                                                 anchors.leftMargin: 16; anchors.rightMargin: 10; spacing: 2
-                                                FText { text: root.clashMark(modelData) + root.rsvpMark(modelData) + (modelData.title || "(untitled)"); color: root.myRsvpOf(modelData) === "no" ? root.cSub : root.cText; font.strikeout: root.myRsvpOf(modelData) === "no"; font.pixelSize: 14; font.weight: Theme.typography.weightMedium; elide: Text.ElideRight; width: parent.width }
+                                                FText { text: root.clashMark(modelData) + root.rsvpMark(modelData) + (modelData.title || Fq.t("(untitled)")); color: root.myRsvpOf(modelData) === "no" ? root.cSub : root.cText; font.strikeout: root.myRsvpOf(modelData) === "no"; font.pixelSize: 14; font.weight: Theme.typography.weightMedium; elide: Text.ElideRight; width: parent.width }
                                                 FText { text: root.fmtTime(modelData.startTime) + " – " + root.fmtTime(modelData.endTime) + (modelData.location ? " · " + modelData.location : ""); color: root.cSub; font.pixelSize: 12; elide: Text.ElideRight; width: parent.width }
                                             }
                                             MouseArea { id: evMA2; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.openNight(modelData) }
@@ -1744,7 +1759,7 @@ Item {
                         FText { text: "🔍"; font.pixelSize: 12; color: root.cSub }
                         TextField {
                             id: searchField
-                            Layout.fillWidth: true; placeholderText: "Search events…"
+                            Layout.fillWidth: true; placeholderText: Fq.t("Search events…")
                             color: root.cText; font.pixelSize: 13; background: Item {}
                             onTextChanged: root.searchQuery = text
                         }
@@ -1766,17 +1781,17 @@ Item {
                             height: 26; radius: 0; width: Math.min(160, chipLblR.implicitWidth + 20)
                             color: on ? root.cSurface : "transparent"; border.width: 1; border.color: on ? root.cBlue : root.cSurface2
                             FText { id: chipLblR; textFormat: Text.PlainText; anchors.centerIn: parent; width: Math.min(implicitWidth, parent.width - 16); elide: Text.ElideRight
-                                text: modelData.label; color: parent.on ? root.cBlue : root.cSub; font.pixelSize: 12 }
+                                text: Fq.t(modelData.label); color: parent.on ? root.cBlue : root.cSub; font.pixelSize: 12 }
                             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { root.rangeId = modelData.id; root.rangePicked = true } }
                         }
                     }
                 }
                 FText {
-                    text: root.searching ? (root.searchResults.length + " result" + (root.searchResults.length === 1 ? "" : "s")) : Qt.formatDate(root.selectedDay, "dddd")
+                    text: root.searching ? (root.searchResults.length + Fq.t(" result") + (root.searchResults.length === 1 ? "" : "s")) : Fq.fmtDate(root.selectedDay, "dddd")
                     color: root.cText; font.pixelSize: 18; font.weight: Theme.typography.weightMedium
                 }
                 FText {
-                    text: root.searching ? ("for “" + root.searchQuery.trim() + "”") : Qt.formatDate(root.selectedDay, "MMMM d, yyyy")
+                    text: root.searching ? (Fq.t("for “") + root.searchQuery.trim() + "”") : Fq.fmtDate(root.selectedDay, "MMMM d, yyyy")
                     color: root.cSub; font.pixelSize: 13; elide: Text.ElideRight; Layout.fillWidth: true
                 }
                 Rectangle { Layout.fillWidth: true; height: 1; color: root.cSurface2 }
@@ -1797,9 +1812,9 @@ Item {
                                 ColumnLayout {
                                     id: cardCol
                                     Layout.fillWidth: true; spacing: 2
-                                    FText { text: root.clashMark(modelData) + root.rsvpMark(modelData) + (modelData.title || "(untitled)"); color: root.myRsvpOf(modelData) === "no" ? root.cSub : root.cText; font.strikeout: root.myRsvpOf(modelData) === "no"; font.pixelSize: 14; font.weight: Theme.typography.weightMedium; elide: Text.ElideRight; Layout.fillWidth: true }
+                                    FText { text: root.clashMark(modelData) + root.rsvpMark(modelData) + (modelData.title || Fq.t("(untitled)")); color: root.myRsvpOf(modelData) === "no" ? root.cSub : root.cText; font.strikeout: root.myRsvpOf(modelData) === "no"; font.pixelSize: 14; font.weight: Theme.typography.weightMedium; elide: Text.ElideRight; Layout.fillWidth: true }
                                     FText {
-                                        text: (root.searching ? Qt.formatDate(new Date(modelData.startTime), "ddd MMM d") + " · " : "") + root.fmtTime(modelData.startTime) + " – " + root.fmtTime(modelData.endTime)
+                                        text: (root.searching ? Fq.fmtDate(new Date(modelData.startTime), "ddd MMM d") + " · " : "") + root.fmtTime(modelData.startTime) + " – " + root.fmtTime(modelData.endTime)
                                         color: root.cSub; font.pixelSize: 12; elide: Text.ElideRight; Layout.fillWidth: true
                                     }
                                     FText {
@@ -1813,7 +1828,7 @@ Item {
                                             model: root.fieldValues(modelData)
                                             Rectangle {
                                                 width: badgeT.implicitWidth + 12; height: 16; radius: 0; color: root.cSurface2
-                                                FText { id: badgeT; anchors.centerIn: parent; text: modelData; color: root.cText; font.pixelSize: 12 }
+                                                FText { id: badgeT; anchors.centerIn: parent; text: Fq.t(modelData); color: root.cText; font.pixelSize: 12 }
                                             }
                                         }
                                     }
@@ -1840,7 +1855,7 @@ Item {
                     FText {
                         anchors.centerIn: parent; width: parent.width - 20
                         visible: dayList.count === 0
-                        text: root.searching ? "No events match your search." : "No events on this day.\nClick “+ Event” to add one."
+                        text: root.searching ? Fq.t("No events match your search.") : Fq.t("No events on this day.\nClick “+ Event” to add one.")
                         horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap
                         color: root.cFaint; font.pixelSize: 13
                     }
@@ -1879,9 +1894,9 @@ Item {
         return { open: false, collab: false } // closed
     }
     readonly property var accessTiers: [
-        { tier: "closed",        title: "Closed",        desc: "Only editors add events; everyone edits only their own." },
-        { tier: "open",          title: "Open",          desc: "Anyone you invite can add events; everyone edits only their own." },
-        { tier: "collaborative", title: "Collaborative", desc: "Anyone you invite can add — and edit or delete ANY event." }
+        { tier: "closed",        title: Fq.t("Closed"),        desc: Fq.t("Only editors add events; everyone edits only their own.") },
+        { tier: "open",          title: Fq.t("Open"),          desc: Fq.t("Anyone you invite can add events; everyone edits only their own.") },
+        { tier: "collaborative", title: Fq.t("Collaborative"), desc: Fq.t("Anyone you invite can add — and edit or delete ANY event.") }
     ]
     // Event editor read-only: a NEW event needs add rights; an EXISTING event needs edit
     // rights on THAT event (yours, or you're an editor). Reactive to editCalId/editingEvent.
@@ -1917,7 +1932,7 @@ Item {
     property bool evAllDay: false
     property int evReminder: 10           // minutes before; 0 = none
     property string evRecurFreq: ""       // "" = does not repeat | daily/weekly/monthly/yearly
-    readonly property var reminderOpts: [{ l: "None", v: 0 }, { l: "10 min", v: 10 }, { l: "30 min", v: 30 }, { l: "1 hour", v: 60 }, { l: "1 day", v: 1440 }]
+    readonly property var reminderOpts: [{ l: Fq.t("None"), v: 0 }, { l: Fq.t("10 min"), v: 10 }, { l: Fq.t("30 min"), v: 30 }, { l: Fq.t("1 hour"), v: 60 }, { l: Fq.t("1 day"), v: 1440 }]
     // ── attachments (ADR 0017 — stored in Logos Storage, sealed with the calendar key) ──
     property var evAttachments: []          // refs on the current event draft: {name,mime,size,storageCid,blobId}
     property bool attachBusy: false
@@ -2032,7 +2047,7 @@ Item {
             Qt.openUrlExternally("file://" + r.path)
         }
     }
-    readonly property var recurOpts: [{ l: "Does not repeat", v: "" }, { l: "Daily", v: "daily" }, { l: "Weekly", v: "weekly" }, { l: "Monthly", v: "monthly" }, { l: "Yearly", v: "yearly" }]
+    readonly property var recurOpts: [{ l: Fq.t("Does not repeat"), v: "" }, { l: Fq.t("Daily"), v: "daily" }, { l: Fq.t("Weekly"), v: "weekly" }, { l: Fq.t("Monthly"), v: "monthly" }, { l: Fq.t("Yearly"), v: "yearly" }]
     // Build the recur object from the current editor controls (null when "Does not repeat").
     function buildRecur() {
         if (!root.evRecurFreq) return null
@@ -2160,14 +2175,14 @@ Item {
             root.commentBusy = false
             var res = root.j(r, {})
             if (res && res.ok) { commentInput.text = ""; root.refresh() }
-            else root.notify("Couldn't post the comment" + (res && res.error ? ": " + res.error : "."), true)
+            else root.notify(Fq.t("Couldn't post the comment") + (res && res.error ? ": " + res.error : "."), true)
         })
     }
     function deleteComment(id) {
         root.coreAsync("deleteExt", [root.editCalId, id], function (r) {
             var res = root.j(r, {})
             if (res && res.ok) root.refresh()
-            else root.notify("Couldn't delete the comment" + (res && res.error ? ": " + res.error : "."), true)
+            else root.notify(Fq.t("Couldn't delete the comment") + (res && res.error ? ": " + res.error : "."), true)
         })
     }
     // Merge my optimistic RSVP over the folded map, count a status.
@@ -2227,7 +2242,7 @@ Item {
         if (!root.editingEvent) return
         var src = root.editingEvent
         var nv = {
-            title: (src.title || "(untitled)") + " (copy)",
+            title: (src.title || Fq.t("(untitled)")) + Fq.t(" (copy)"),
             startTime: src.startTime, endTime: src.endTime, allDay: !!src.allDay,
             description: src.description || "", location: src.location || "", url: src.url || "",
             reminderMin: src.reminderMin || 0
@@ -2238,7 +2253,7 @@ Item {
         root.coreAsync("createEvent", [root.editCalId, JSON.stringify(nv)], function () { root.refresh() })
         root.lastCalId = root.editCalId
         eventPopup.close(); refresh()
-        root.notify("Event duplicated")
+        root.notify(Fq.t("Event duplicated"))
     }
     // Drag & drop: move an event's occurrence to another day, preserving its time-of-day + duration.
     // Edits the underlying event (LWW upsert). Refuses (with a toast) if you can't edit it.
@@ -2247,14 +2262,14 @@ Item {
         var s = new Date(ev.startTime)
         if (root.sameDay(s, day)) return   // dropped on its own day — no-op
         var c = root.calById(ev.calendarId)
-        if (!root.canEditEvent(c, ev)) { root.notify("You can't move this event.", true); return }
+        if (!root.canEditEvent(c, ev)) { root.notify(Fq.t("You can't move this event."), true); return }
         var dur = ev.endTime - ev.startTime
         var ns = new Date(day.getFullYear(), day.getMonth(), day.getDate(), s.getHours(), s.getMinutes(), 0, 0)
         var up = JSON.parse(JSON.stringify(ev))
         delete up.seriesId; delete up.occ
         up.startTime = ns.getTime(); up.endTime = ns.getTime() + dur
         root.coreAsync("updateEvent", [JSON.stringify(up)], function () { root.refresh() })
-        root.notify((ev.recur ? "Moved series to " : "Moved to ") + Qt.formatDate(ns, "MMM d"))
+        root.notify((ev.recur ? Fq.t("Moved series to ") : Fq.t("Moved to ")) + Fq.fmtDate(ns, "MMM d"))
     }
     function deleteEvent() { if (editingEvent) deleteEventPopup.open() }   // confirm first (destructive)
     function doDeleteEvent() {
@@ -2265,7 +2280,7 @@ Item {
     // Native file picker for attachments; poll timer for the async upload/download (no blocking IPC).
     FileDialog {
         id: attachFileDialog
-        title: "Choose a file to attach"
+        title: Fq.t("Choose a file to attach")
         onAccepted: root.onAttachmentPicked(attachFileDialog.selectedFile)
     }
     Timer { id: attachPoll; interval: 600; repeat: true; onTriggered: root.pollAttach() }
@@ -2273,7 +2288,8 @@ Item {
     // ── toast: surface outcomes/failures instead of the old silent "" swallow ──
     property string toastMsg: ""
     property bool toastErr: false
-    function notify(msg, isErr) { root.toastMsg = msg; root.toastErr = !!isErr; toastTimer.restart() }
+    // Messages pass through the translation table whole (library errors come in English).
+    function notify(msg, isErr) { root.toastMsg = Fq.t(String(msg)); root.toastErr = !!isErr; toastTimer.restart() }
     Timer { id: toastTimer; interval: 4500; onTriggered: root.toastMsg = "" }
     Rectangle {
         visible: root.toastMsg !== ""
@@ -2303,7 +2319,7 @@ Item {
         RowLayout {
             anchors.fill: parent; anchors.margins: 6; spacing: 5
             Rectangle { width: 3; height: 24; radius: 0; color: dragProxy.dragEv ? root.evColor(dragProxy.dragEv) : "transparent"; Layout.alignment: Qt.AlignVCenter }
-            FText { text: dragProxy.dragEv ? (dragProxy.dragEv.title || "(untitled)") : ""; color: root.cText; font.pixelSize: 12; elide: Text.ElideRight; Layout.fillWidth: true; Layout.alignment: Qt.AlignVCenter }
+            FText { text: dragProxy.dragEv ? (dragProxy.dragEv.title || Fq.t("(untitled)")) : ""; color: root.cText; font.pixelSize: 12; elide: Text.ElideRight; Layout.fillWidth: true; Layout.alignment: Qt.AlignVCenter }
         }
     }
 
@@ -2312,8 +2328,8 @@ Item {
         var path = ("" + fileUrl).replace(/^file:\/\//, "")
         root.coreAsync("exportCalendarIcsFile", [root.setCalId, path], function (raw) {
             var r = root.j(raw, null)
-            if (r && r.ok) root.notify("Exported " + (r.events || 0) + " event(s) → " + r.path, false)
-            else root.notify("Export failed: " + ((r && r.error) || "unknown"), true)
+            if (r && r.ok) root.notify(Fq.t("Exported ") + (r.events || 0) + Fq.t(" event(s) → ") + r.path, false)
+            else root.notify(Fq.t("Export failed: ") + ((r && r.error) || "unknown"), true)
         })
     }
     function onIcsImportPicked(fileUrl) {
@@ -2321,21 +2337,21 @@ Item {
         root.coreAsync("importIcsFile", [root.setCalId, path], function (raw) {
             var r = root.j(raw, null)
             if (r && !r.error && typeof r.imported === "number") {
-                root.notify("Imported " + r.imported + " event(s)" + (r.skipped ? (", skipped " + r.skipped) : ""), false)
+                root.notify(Fq.t("Imported ") + r.imported + Fq.t(" event(s)") + (r.skipped ? (Fq.t(", skipped ") + r.skipped) : ""), false)
                 root.refresh()
-            } else root.notify("Import failed: " + ((r && r.error) || "unknown"), true)
+            } else root.notify(Fq.t("Import failed: ") + ((r && r.error) || "unknown"), true)
         })
     }
     FileDialog {
         id: icsSaveDialog
-        title: "Export calendar to .ics"
+        title: Fq.t("Export calendar to .ics")
         fileMode: FileDialog.SaveFile
         nameFilters: ["iCalendar (*.ics)", "All files (*)"]
         onAccepted: root.onIcsExportPicked(icsSaveDialog.selectedFile)
     }
     FileDialog {
         id: icsOpenDialog
-        title: "Import events from .ics"
+        title: Fq.t("Import events from .ics")
         nameFilters: ["iCalendar (*.ics)", "All files (*)"]
         onAccepted: root.onIcsImportPicked(icsOpenDialog.selectedFile)
     }
@@ -2356,9 +2372,9 @@ Item {
         ColumnLayout {
             id: evCol
             width: evFlick.width; spacing: Theme.spacing.small
-            DText { text: (root.editingEvent ? "Edit event" : "New event").toUpperCase(); color: root.cText; font.pixelSize: 30 }
+            DText { text: (root.editingEvent ? Fq.t("Edit event") : Fq.t("New event")).toUpperCase(); color: root.cText; font.pixelSize: 30 }
 
-            FText { text: "Calendar"; color: root.cFaint; font.pixelSize: 12 }
+            FText { text: Fq.t("Calendar"); color: root.cFaint; font.pixelSize: 12 }
             ComboBox {
                 id: evCalSelect
                 Layout.fillWidth: true
@@ -2383,7 +2399,7 @@ Item {
                 }
                 contentItem: FText {
                     leftPadding: 10; rightPadding: 28
-                    text: evCalSelect.displayText || "(calendar)"
+                    text: evCalSelect.displayText || Fq.t("(calendar)")
                     color: root.cText; font.pixelSize: 14
                     verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight
                 }
@@ -2397,7 +2413,7 @@ Item {
                     contentItem: RowLayout {
                         spacing: 6
                         Rectangle { width: 10; height: 10; radius: 0; color: root.calColor(modelData.id); Layout.alignment: Qt.AlignVCenter }
-                        FText { text: modelData.name || "(cal)"; color: root.cText; font.pixelSize: 14; elide: Text.ElideRight; Layout.fillWidth: true }
+                        FText { text: modelData.name || Fq.t("(cal)"); color: root.cText; font.pixelSize: 14; elide: Text.ElideRight; Layout.fillWidth: true }
                     }
                     background: Rectangle { color: highlighted ? root.cSurface : root.cSurface }
                 }
@@ -2417,8 +2433,8 @@ Item {
                 }
             }
 
-            FText { text: "Title"; color: root.cFaint; font.pixelSize: 12 }
-            Field { id: evTitle; readOnly: root.eventReadOnly; Layout.fillWidth: true; placeholderText: "Event title" }
+            FText { text: Fq.t("Title"); color: root.cFaint; font.pixelSize: 12 }
+            Field { id: evTitle; readOnly: root.eventReadOnly; Layout.fillWidth: true; placeholderText: Fq.t("Event title") }
 
             // all-day toggle — hides the time inputs when on
             Row {
@@ -2430,36 +2446,36 @@ Item {
                     FText { anchors.centerIn: parent; visible: root.evAllDay; text: "✓"; color: root.cBase; font.pixelSize: 14 }
                     MouseArea { anchors.fill: parent; onClicked: root.evAllDay = !root.evAllDay }
                 }
-                FText { text: "All-day"; color: root.cText; font.pixelSize: 13; anchors.verticalCenter: parent.verticalCenter }
+                FText { text: Fq.t("All-day"); color: root.cText; font.pixelSize: 13; anchors.verticalCenter: parent.verticalCenter }
             }
 
             RowLayout {
                 Layout.fillWidth: true; spacing: Theme.spacing.small
-                ColumnLayout { Layout.fillWidth: true; FText { text: "Date"; color: root.cFaint; font.pixelSize: 12 }
-                    Field { id: evDate; readOnly: true; Layout.fillWidth: true; placeholderText: "YYYY-MM-DD"
+                ColumnLayout { Layout.fillWidth: true; FText { text: Fq.t("Date"); color: root.cFaint; font.pixelSize: 12 }
+                    Field { id: evDate; readOnly: true; Layout.fillWidth: true; placeholderText: Fq.t("YYYY-MM-DD")
                         MouseArea { anchors.fill: parent; enabled: !root.eventReadOnly; cursorShape: Qt.PointingHandCursor; onClicked: datePicker.openFor(evDate, evDate.text) } } }
-                ColumnLayout { visible: !root.evAllDay; FText { text: "Start"; color: root.cFaint; font.pixelSize: 12 }
+                ColumnLayout { visible: !root.evAllDay; FText { text: Fq.t("Start"); color: root.cFaint; font.pixelSize: 12 }
                     Field { id: evStart; readOnly: true; Layout.preferredWidth: 80; placeholderText: "HH:MM"
                         MouseArea { anchors.fill: parent; enabled: !root.eventReadOnly; cursorShape: Qt.PointingHandCursor; onClicked: timePicker.openFor(evStart, evStart.text) } } }
-                ColumnLayout { visible: !root.evAllDay; FText { text: "End"; color: root.cFaint; font.pixelSize: 12 }
+                ColumnLayout { visible: !root.evAllDay; FText { text: Fq.t("End"); color: root.cFaint; font.pixelSize: 12 }
                     Field { id: evEnd; readOnly: true; Layout.preferredWidth: 80; placeholderText: "HH:MM"
                         MouseArea { anchors.fill: parent; enabled: !root.eventReadOnly; cursorShape: Qt.PointingHandCursor; onClicked: timePicker.openFor(evEnd, evEnd.text) } } }
             }
 
-            FText { text: "Notes"; color: root.cFaint; font.pixelSize: 12 }
-            Field { id: evNotes; readOnly: root.eventReadOnly; Layout.fillWidth: true; placeholderText: "Optional" }
+            FText { text: Fq.t("Notes"); color: root.cFaint; font.pixelSize: 12 }
+            Field { id: evNotes; readOnly: root.eventReadOnly; Layout.fillWidth: true; placeholderText: Fq.t("Optional") }
 
-            FText { text: "Location"; color: root.cFaint; font.pixelSize: 12 }
-            Field { id: evLocation; readOnly: root.eventReadOnly; Layout.fillWidth: true; placeholderText: "Where" }
+            FText { text: Fq.t("Location"); color: root.cFaint; font.pixelSize: 12 }
+            Field { id: evLocation; readOnly: root.eventReadOnly; Layout.fillWidth: true; placeholderText: Fq.t("Where") }
 
-            FText { text: "Meeting link"; color: root.cFaint; font.pixelSize: 12 }
+            FText { text: Fq.t("Meeting link"); color: root.cFaint; font.pixelSize: 12 }
             Field {
                 id: evUrl; readOnly: root.eventReadOnly; Layout.fillWidth: true; placeholderText: "https://…"
                 inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhUrlCharactersOnly
             }
 
             // ── attachments (Logos Storage, sealed with the calendar key) ──
-            FText { text: "Attachments"; color: root.cFaint; font.pixelSize: 12 }
+            FText { text: Fq.t("Attachments"); color: root.cFaint; font.pixelSize: 12 }
             Repeater {
                 model: root.evAttachments
                 delegate: RowLayout {
@@ -2484,17 +2500,17 @@ Item {
                 Rectangle { height: parent.height; radius: 0; color: root.cBlue
                     width: parent.width * Math.max(0.02, root.attachProgress >= 0 ? root.attachProgress : 0) }
             }
-            FText { visible: root.attachBusy && root.attachPollMode === "download"; text: root.attachProgress >= 0 ? Math.round(root.attachProgress * 100) + "%" : "Finding a source…"; color: root.cSub; font.pixelSize: 12 }
+            FText { visible: root.attachBusy && root.attachPollMode === "download"; text: root.attachProgress >= 0 ? Math.round(root.attachProgress * 100) + "%" : Fq.t("Finding a source…"); color: root.cSub; font.pixelSize: 12 }
             FText { visible: root.attachBusy && root.attachDiag !== ""; text: root.attachDiag; color: root.cFaint; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true }
             FqButton {
                 visible: !root.eventReadOnly
-                text: root.attachBusy ? "Working…" : "＋ Attach file"
+                text: root.attachBusy ? Fq.t("Working…") : Fq.t("＋ Attach file")
                 enabled: !root.attachBusy
                 onClicked: attachFileDialog.open()
             }
 
             // reminder chips
-            FText { text: "Reminder"; color: root.cFaint; font.pixelSize: 12 }
+            FText { text: Fq.t("Reminder"); color: root.cFaint; font.pixelSize: 12 }
             Flow {
                 Layout.fillWidth: true; spacing: 6
                 Repeater {
@@ -2504,14 +2520,14 @@ Item {
                         color: root.evReminder === modelData.v ? root.cSurface : root.cBase
                         border.width: 1
                         border.color: root.evReminder === modelData.v ? root.cBlue : root.cSurface2
-                        FText { id: remLbl; anchors.centerIn: parent; text: modelData.l; color: root.cText; font.pixelSize: 13 }
+                        FText { id: remLbl; anchors.centerIn: parent; text: Fq.t(modelData.l); color: root.cText; font.pixelSize: 13 }
                         MouseArea { anchors.fill: parent; onClicked: root.evReminder = modelData.v }
                     }
                 }
             }
 
             // recurrence
-            FText { text: "Repeat"; color: root.cFaint; font.pixelSize: 12 }
+            FText { text: Fq.t("Repeat"); color: root.cFaint; font.pixelSize: 12 }
             Flow {
                 Layout.fillWidth: true; spacing: 6
                 Repeater {
@@ -2521,7 +2537,7 @@ Item {
                         color: root.evRecurFreq === modelData.v ? root.cSurface : root.cBase
                         border.width: 1
                         border.color: root.evRecurFreq === modelData.v ? root.cBlue : root.cSurface2
-                        FText { id: recLbl; anchors.centerIn: parent; text: modelData.l; color: root.cText; font.pixelSize: 13 }
+                        FText { id: recLbl; anchors.centerIn: parent; text: Fq.t(modelData.l); color: root.cText; font.pixelSize: 13 }
                         MouseArea { anchors.fill: parent; onClicked: root.evRecurFreq = modelData.v }
                     }
                 }
@@ -2529,8 +2545,8 @@ Item {
             RowLayout {
                 visible: root.evRecurFreq !== ""
                 Layout.fillWidth: true; spacing: Theme.spacing.small
-                ColumnLayout { FText { text: "Every N"; color: root.cFaint; font.pixelSize: 12 } Field { id: evRecurInterval; Layout.preferredWidth: 70; text: "1"; inputMethodHints: Qt.ImhFormattedNumbersOnly; placeholderText: "1" } }
-                ColumnLayout { Layout.fillWidth: true; FText { text: "Until (optional)"; color: root.cFaint; font.pixelSize: 12 } Field { id: evRecurUntil; Layout.fillWidth: true; placeholderText: "YYYY-MM-DD" } }
+                ColumnLayout { FText { text: Fq.t("Every N"); color: root.cFaint; font.pixelSize: 12 } Field { id: evRecurInterval; Layout.preferredWidth: 70; text: "1"; inputMethodHints: Qt.ImhFormattedNumbersOnly; placeholderText: "1" } }
+                ColumnLayout { Layout.fillWidth: true; FText { text: Fq.t("Until (optional)"); color: root.cFaint; font.pixelSize: 12 } Field { id: evRecurUntil; Layout.fillWidth: true; placeholderText: Fq.t("YYYY-MM-DD") } }
             }
             FText {
                 visible: root.evRecurFreq !== ""
@@ -2541,7 +2557,7 @@ Item {
             // note when editing a recurring series
             FText {
                 visible: !!root.editingRecurring()
-                text: "Part of a repeating event — changes apply to the whole series."
+                text: Fq.t("Part of a repeating event — changes apply to the whole series.")
                 color: root.cFaint; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true
             }
 
@@ -2557,7 +2573,7 @@ Item {
                     property bool curBool: model.bval
                     property string optsJson: model.opts
                     FText {
-                        text: (model.label || model.key) + (model.ftype === "number" ? " (number)" : (model.ftype === "url" ? " (url)" : ""))
+                        text: (model.label || model.key) + (model.ftype === "number" ? Fq.t(" (number)") : (model.ftype === "url" ? Fq.t(" (url)") : ""))
                         color: root.cFaint; font.pixelSize: 12
                     }
                     // bool → checkbox toggle
@@ -2571,7 +2587,7 @@ Item {
                             FText { anchors.centerIn: parent; visible: fieldRow.curBool; text: "✓"; color: root.cBase; font.pixelSize: 14 }
                             MouseArea { anchors.fill: parent; onClicked: evFieldsModel.setProperty(fieldRow.rowIndex, "bval", !fieldRow.curBool) }
                         }
-                        FText { text: fieldRow.curBool ? "Yes" : "No"; color: root.cText; font.pixelSize: 13; anchors.verticalCenter: parent.verticalCenter }
+                        FText { text: fieldRow.curBool ? Fq.t("Yes") : Fq.t("No"); color: root.cText; font.pixelSize: 13; anchors.verticalCenter: parent.verticalCenter }
                     }
                     // enum → selectable chips from options
                     Flow {
@@ -2596,7 +2612,7 @@ Item {
                         text: model.sval
                         inputMethodHints: model.ftype === "number" ? Qt.ImhFormattedNumbersOnly
                                           : (model.ftype === "url" ? (Qt.ImhNoAutoUppercase | Qt.ImhUrlCharactersOnly) : Qt.ImhNone)
-                        placeholderText: model.ftype === "date" ? "YYYY-MM-DD"
+                        placeholderText: model.ftype === "date" ? Fq.t("YYYY-MM-DD")
                                          : (model.ftype === "datetime" ? "YYYY-MM-DD HH:MM"
                                          : (model.ftype === "color" ? "#rrggbb"
                                          : (model.ftype === "url" ? "https://…" : "")))
@@ -2618,13 +2634,13 @@ Item {
                     spacing: 2
                     FText {
                         textFormat: Text.PlainText; color: root.cRed; font.pixelSize: 12; font.weight: Theme.typography.weightMedium
-                        text: "⚠ Overlaps " + (parent.parent.clashList.length === 1 ? "another event" : parent.parent.clashList.length + " other events") + " in this calendar"
+                        text: Fq.t("⚠ Overlaps ") + (parent.parent.clashList.length === 1 ? Fq.t("another event") : parent.parent.clashList.length + Fq.t(" other events")) + Fq.t(" in this calendar")
                     }
                     Repeater {
                         model: parent.parent.clashList.slice(0, 5)
                         delegate: FText {
                             textFormat: Text.PlainText; color: root.cText; font.pixelSize: 12; elide: Text.ElideRight; width: clashCol.width
-                            text: (modelData.title || "(untitled)") + " · " + new Date(modelData.startTime).toLocaleDateString() + " " + root.fmtTime(modelData.startTime) + "–" + root.fmtTime(modelData.endTime)
+                            text: (modelData.title || Fq.t("(untitled)")) + " · " + new Date(modelData.startTime).toLocaleDateString() + " " + root.fmtTime(modelData.startTime) + "–" + root.fmtTime(modelData.endTime)
                         }
                     }
                 }
@@ -2636,7 +2652,7 @@ Item {
                 readonly property var list: root.editingEvent !== null ? root.commentsOf(root.editingEvent) : []
                 visible: root.editingEvent !== null
                 Layout.fillWidth: true; Layout.topMargin: Theme.spacing.small; spacing: 6
-                FText { text: "Comments" + (commentsBox.list.length ? " (" + commentsBox.list.length + ")" : ""); color: root.cFaint; font.pixelSize: 12 }
+                FText { text: Fq.t("Comments") + (commentsBox.list.length ? " (" + commentsBox.list.length + ")" : ""); color: root.cFaint; font.pixelSize: 12 }
                 Repeater {
                     model: commentsBox.list
                     delegate: ColumnLayout {
@@ -2646,29 +2662,29 @@ Item {
                         RowLayout {
                             Layout.fillWidth: true; spacing: 8
                             FText { Layout.fillWidth: true; elide: Text.ElideRight; color: root.cSub; font.pixelSize: 12
-                                text: (parent.parent.mine ? "You" : String(parent.parent.modelData.author).substring(0, 8) + "…") + " · " + Qt.formatDateTime(new Date(parent.parent.modelData.hlc.wall), "d MMM hh:mm") }
-                            FText { visible: parent.parent.mine || root.isEditorMe(root.calById(root.editCalId)); text: "Delete"; color: root.cRed; font.pixelSize: 12
+                                text: (parent.parent.mine ? Fq.t("You") : String(parent.parent.modelData.author).substring(0, 8) + "…") + " · " + Fq.fmtDateTime(new Date(parent.parent.modelData.hlc.wall), "d MMM hh:mm") }
+                            FText { visible: parent.parent.mine || root.isEditorMe(root.calById(root.editCalId)); text: Fq.t("Delete"); color: root.cRed; font.pixelSize: 12
                                 MouseArea { anchors.fill: parent; anchors.margins: -4; cursorShape: Qt.PointingHandCursor; onClicked: root.deleteComment(parent.parent.parent.modelData.id) } }
                         }
                         FText { Layout.fillWidth: true; wrapMode: Text.Wrap; color: root.cText; font.pixelSize: 13
-                            text: (parent.modelData.data && typeof parent.modelData.data.text === "string") ? parent.modelData.data.text : "(empty)" }
+                            text: (parent.modelData.data && typeof parent.modelData.data.text === "string") ? parent.modelData.data.text : Fq.t("(empty)") }
                     }
                 }
                 FText { visible: !root.coreHasComments; Layout.fillWidth: true; wrapMode: Text.Wrap; color: root.cSub; font.pixelSize: 12
-                    text: "Update the ‘scala’ package to 0.12.0+ in Basecamp to post comments." }
+                    text: Fq.t("Update the ‘scala’ package to 0.12.0+ in Basecamp to post comments.") }
                 RowLayout {
                     visible: root.coreHasComments
                     Layout.fillWidth: true; spacing: 8
                     TextField {
                         id: commentInput
-                        Layout.fillWidth: true; placeholderText: "Add a comment…"; color: root.cText; font.pixelSize: 13
+                        Layout.fillWidth: true; placeholderText: Fq.t("Add a comment…"); color: root.cText; font.pixelSize: 13
                         onAccepted: root.postComment(text)
                     }
                     Rectangle {
                         width: postLbl.implicitWidth + 24; height: 32; radius: 0
                         opacity: commentInput.text.trim() === "" || root.commentBusy ? 0.4 : 1
                         color: root.cSurface; border.width: 1; border.color: root.cSurface2
-                        FText { id: postLbl; textFormat: Text.PlainText; anchors.centerIn: parent; text: root.commentBusy ? "Posting…" : "Post"; color: root.cText; font.pixelSize: 13 }
+                        FText { id: postLbl; textFormat: Text.PlainText; anchors.centerIn: parent; text: root.commentBusy ? Fq.t("Posting…") : Fq.t("Post"); color: root.cText; font.pixelSize: 13 }
                         MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.postComment(commentInput.text) }
                     }
                 }
@@ -2678,23 +2694,23 @@ Item {
             ColumnLayout {
                 visible: root.editingEvent !== null
                 Layout.fillWidth: true; Layout.topMargin: Theme.spacing.small; spacing: 4
-                FText { text: "Your RSVP"; color: root.cFaint; font.pixelSize: 12 }
+                FText { text: Fq.t("Your RSVP"); color: root.cFaint; font.pixelSize: 12 }
                 Flow {
                     Layout.fillWidth: true; spacing: 6
                     Repeater {
-                        model: [{ k: "going", l: "Going" }, { k: "maybe", l: "Maybe" }, { k: "no", l: "No" }]
+                        model: [{ k: "going", l: Fq.t("Going") }, { k: "maybe", l: Fq.t("Maybe") }, { k: "no", l: Fq.t("No") }]
                         delegate: Rectangle {
                             height: 28; radius: 0; width: rsvpLbl.width + 20
                             color: root.evMyRsvp === modelData.k ? root.cSurface : root.cBase
                             border.width: 1
                             border.color: root.evMyRsvp === modelData.k ? root.cBlue : root.cSurface2
-                            FText { id: rsvpLbl; anchors.centerIn: parent; text: modelData.l; color: root.cText; font.pixelSize: 13 }
+                            FText { id: rsvpLbl; anchors.centerIn: parent; text: Fq.t(modelData.l); color: root.cText; font.pixelSize: 13 }
                             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.setRsvp(modelData.k) }
                         }
                     }
                 }
                 FText {
-                    text: root.rsvpCount("going") + " going · " + root.rsvpCount("maybe") + " maybe · " + root.rsvpCount("no") + " no"
+                    text: root.rsvpCount("going") + Fq.t(" going · ") + root.rsvpCount("maybe") + Fq.t(" maybe · ") + root.rsvpCount("no") + Fq.t(" no")
                     color: root.cSub; font.pixelSize: 12
                 }
             }
@@ -2703,7 +2719,7 @@ Item {
             ColumnLayout {
                 visible: root.editingEvent !== null && root.evHistory && root.evHistory.length > 0
                 Layout.fillWidth: true; Layout.topMargin: Theme.spacing.small; spacing: 2
-                FText { text: "History"; color: root.cFaint; font.pixelSize: 12 }
+                FText { text: Fq.t("History"); color: root.cFaint; font.pixelSize: 12 }
                 Repeater {
                     model: root.evHistory || []
                     delegate: FText {
@@ -2711,7 +2727,7 @@ Item {
                         text: "· " + (modelData.action || "changed")
                               + ((modelData.action === "edited" && modelData.changed && modelData.changed.length) ? " (" + modelData.changed.join(", ") + ")" : "")
                               + " by " + root.shortAuthor(modelData.author)
-                              + " — " + Qt.formatDateTime(new Date(modelData.at), "MMM d, hh:mm")
+                              + " — " + Fq.fmtDateTime(new Date(modelData.at), "MMM d, hh:mm")
                         color: root.cSub; font.pixelSize: 12; elide: Text.ElideRight
                     }
                 }
@@ -2731,7 +2747,7 @@ Item {
                 implicitHeight: roLabel.implicitHeight + 2 * Theme.spacing.small
                 ColumnLayout {
                     anchors.fill: parent; anchors.margins: Theme.spacing.small; spacing: 2
-                    FText { text: "🔒 Read-only"; color: root.cYellow; font.pixelSize: 12; font.weight: Theme.typography.weightMedium }
+                    FText { text: Fq.t("🔒 Read-only"); color: root.cYellow; font.pixelSize: 12; font.weight: Theme.typography.weightMedium }
                     FText {
                         id: roLabel
                         text: root.readonlyReason(root.calById(root.editCalId), root.editingEvent)
@@ -2741,11 +2757,11 @@ Item {
             }
             RowLayout {
                 Layout.fillWidth: true; Layout.topMargin: Theme.spacing.small; spacing: Theme.spacing.small
-                FqButton { visible: root.editingEvent !== null && !root.eventReadOnly; text: "Delete"; onClicked: root.deleteEvent() }
-                FqButton { visible: root.editingEvent !== null && root.canAddTo(root.calById(root.editCalId)); text: "Duplicate"; onClicked: root.duplicateEvent() }
+                FqButton { visible: root.editingEvent !== null && !root.eventReadOnly; text: Fq.t("Delete"); onClicked: root.deleteEvent() }
+                FqButton { visible: root.editingEvent !== null && root.canAddTo(root.calById(root.editCalId)); text: Fq.t("Duplicate"); onClicked: root.duplicateEvent() }
                 Item { Layout.fillWidth: true }
-                FqButton { text: "Cancel"; onClicked: eventPopup.close() }
-                FqButton { visible: !root.eventReadOnly; text: root.editingEvent ? "Save" : "Create"; enabled: root.eventError() === ""; onClicked: root.saveEvent() }
+                FqButton { text: Fq.t("Cancel"); onClicked: eventPopup.close() }
+                FqButton { visible: !root.eventReadOnly; text: root.editingEvent ? Fq.t("Save") : Fq.t("Create"); enabled: root.eventError() === ""; onClicked: root.saveEvent() }
             }
         }
         }
@@ -2797,7 +2813,7 @@ Item {
                     }
                 }
             }
-            FqButton { Layout.alignment: Qt.AlignRight; text: "Cancel"; onClicked: datePicker.close() }
+            FqButton { Layout.alignment: Qt.AlignRight; text: Fq.t("Cancel"); onClicked: datePicker.close() }
         }
     }
 
@@ -2819,7 +2835,7 @@ Item {
         background: Rectangle { radius: 0; color: root.cSurface; border.width: 1; border.color: root.cSurface2 }
         ColumnLayout {
             anchors.fill: parent; spacing: Theme.spacing.small
-            FText { text: "Pick time"; color: root.cText; font.pixelSize: 15; font.weight: Theme.typography.weightMedium }
+            FText { text: Fq.t("Pick time"); color: root.cText; font.pixelSize: 15; font.weight: Theme.typography.weightMedium }
             RowLayout {
                 Layout.fillWidth: true; Layout.fillHeight: true; spacing: Theme.spacing.small
                 ListView {
@@ -2850,8 +2866,8 @@ Item {
             RowLayout {
                 Layout.fillWidth: true
                 Item { Layout.fillWidth: true }
-                FqButton { text: "Cancel"; onClicked: timePicker.close() }
-                FqButton { text: "Set"; onClicked: { if (timePicker.targetField) timePicker.targetField.text = root.pad(timePicker.selHour) + ":" + root.pad(timePicker.selMin); timePicker.close() } }
+                FqButton { text: Fq.t("Cancel"); onClicked: timePicker.close() }
+                FqButton { text: Fq.t("Set"); onClicked: { if (timePicker.targetField) timePicker.targetField.text = root.pad(timePicker.selHour) + ":" + root.pad(timePicker.selMin); timePicker.close() } }
             }
         }
     }
@@ -2865,8 +2881,8 @@ Item {
         background: Rectangle { radius: 0; color: root.cSurface; border.width: 1; border.color: root.cSurface2 }
         ColumnLayout {
             width: parent.width; spacing: Theme.spacing.medium
-            DText { text: ("Identities").toUpperCase(); color: root.cText; font.pixelSize: 30 }
-            FText { text: "Keys live in loam_core and never leave it. ★ = default for new calendars — tap an identity to make it the default."
+            DText { text: (Fq.t("Identities")).toUpperCase(); color: root.cText; font.pixelSize: 30 }
+            FText { text: Fq.t("Keys live in loam_core and never leave it. ★ = default for new calendars — tap an identity to make it the default.")
                 color: root.cFaint; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true }
             Repeater {
                 model: root.identities
@@ -2903,9 +2919,9 @@ Item {
             }
             RowLayout {
                 Layout.fillWidth: true; Layout.topMargin: Theme.spacing.small; spacing: Theme.spacing.small
-                Field { id: newIdField; Layout.fillWidth: true; placeholderText: "new software identity name"; text: root.newIdentityLabel; onTextChanged: root.newIdentityLabel = text }
+                Field { id: newIdField; Layout.fillWidth: true; placeholderText: Fq.t("new software identity name"); text: root.newIdentityLabel; onTextChanged: root.newIdentityLabel = text }
                 FqButton {
-                    text: "+ Add"
+                    text: Fq.t("+ Add")
                     onClicked: { root.loamAsync("addSoftIdentity", [newIdField.text.trim() || "Identity"], function () { root.refreshIdentities() }); newIdField.text = "" }
                 }
             }
@@ -2913,16 +2929,16 @@ Item {
             // triggers it + shows the overlay). One card = one identity across phone + desktop.
             RowLayout {
                 Layout.fillWidth: true; spacing: Theme.spacing.small
-                Field { id: kcLabelField; Layout.fillWidth: true; placeholderText: "Keycard identity name" }
+                Field { id: kcLabelField; Layout.fillWidth: true; placeholderText: Fq.t("Keycard identity name") }
                 FqButton {
-                    text: "💳 Enroll Keycard"
+                    text: Fq.t("💳 Enroll Keycard")
                     onClicked: { root.coreAsync("enrollKeycard", [kcLabelField.text.trim() || "My Keycard", "scala"]); kcLabelField.text = ""; identitiesPopup.close() }
                 }
             }
             RowLayout {
                 Layout.fillWidth: true; Layout.topMargin: Theme.spacing.small
                 Item { Layout.fillWidth: true }
-                FqButton { text: "Close"; onClicked: identitiesPopup.close() }
+                FqButton { text: Fq.t("Close"); onClicked: identitiesPopup.close() }
             }
         }
     }
@@ -2935,14 +2951,14 @@ Item {
         background: Rectangle { radius: 0; color: root.cSurface; border.width: 1; border.color: root.cSurface2 }
         ColumnLayout {
             width: parent.width; spacing: Theme.spacing.medium
-            FText { text: "Rename identity"; color: root.cText; font.pixelSize: 16; font.weight: Theme.typography.weightMedium }
-            Field { id: renameField; Layout.fillWidth: true; placeholderText: "Identity name" }
+            FText { text: Fq.t("Rename identity"); color: root.cText; font.pixelSize: 16; font.weight: Theme.typography.weightMedium }
+            Field { id: renameField; Layout.fillWidth: true; placeholderText: Fq.t("Identity name") }
             RowLayout {
                 Layout.fillWidth: true; spacing: Theme.spacing.small
                 Item { Layout.fillWidth: true }
-                FqButton { text: "Cancel"; onClicked: idRenamePopup.close() }
+                FqButton { text: Fq.t("Cancel"); onClicked: idRenamePopup.close() }
                 FqButton {
-                    text: "Save"
+                    text: Fq.t("Save")
                     onClicked: {
                         var nm = renameField.text.trim()
                         if (nm.length && root.renameTargetId) root.loamAsync("renameSoftIdentity", [root.renameTargetId, nm], function () { root.refreshIdentities() })
@@ -2962,7 +2978,7 @@ Item {
         readonly property int owned: root.identitySignsCount(root.idRemoveAddr)
         ColumnLayout {
             width: parent.width; spacing: Theme.spacing.medium
-            FText { text: "Remove “" + root.idRemoveLabel + "”?"; color: root.cText; font.pixelSize: 16; font.weight: Theme.typography.weightMedium; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+            FText { text: Fq.t("Remove “") + root.idRemoveLabel + "”?"; color: root.cText; font.pixelSize: 16; font.weight: Theme.typography.weightMedium; wrapMode: Text.WordWrap; Layout.fillWidth: true }
             FText {
                 Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 13
                 color: idRemovePopup.owned > 0 ? root.cRed : root.cFaint
@@ -2975,9 +2991,9 @@ Item {
             RowLayout {
                 Layout.fillWidth: true; spacing: Theme.spacing.small
                 Item { Layout.fillWidth: true }
-                FqButton { text: "Cancel"; onClicked: idRemovePopup.close() }
+                FqButton { text: Fq.t("Cancel"); onClicked: idRemovePopup.close() }
                 FqButton {
-                    text: idRemovePopup.owned > 0 ? "Remove anyway" : "Remove"
+                    text: idRemovePopup.owned > 0 ? Fq.t("Remove anyway") : Fq.t("Remove")
                     onClicked: {
                         root.loamAsync(root.idRemoveKind === "keycard" ? "removeKeycardIdentity" : "removeSoftIdentity", [root.idRemoveId],
                                        function () { root.refreshIdentities(); root.refresh() })
@@ -2992,16 +3008,16 @@ Item {
     // Loam has a root. "ctx" = a new identity just for this calendar (default, unlinkable), "main" =
     // the identity family and friends know, "other" = one of this device's classic identities.
     readonly property var appearChoices: [
-        { k: "ctx",   title: "A new identity just for this calendar", desc: "Nobody can link it to your other calendars. Recommended." },
-        { k: "main",  title: "My main identity", desc: "The one your family and friends know — for a household calendar." },
-        { k: "other", title: "Another identity on this device", desc: "A device, software or Keycard identity, as before." }
+        { k: "ctx",   title: Fq.t("A new identity just for this calendar"), desc: Fq.t("Nobody can link it to your other calendars. Recommended.") },
+        { k: "main",  title: Fq.t("My main identity"), desc: Fq.t("The one your family and friends know — for a household calendar.") },
+        { k: "other", title: Fq.t("Another identity on this device"), desc: Fq.t("A device, software or Keycard identity, as before.") }
     ]
     component AppearChooser: ColumnLayout {
         id: ac
         property string sel: "ctx"
         signal pick(string k)
         spacing: Theme.spacing.small
-        FText { text: "Appear as"; color: root.cFaint; font.pixelSize: 12 }
+        FText { text: Fq.t("Appear as"); color: root.cFaint; font.pixelSize: 12 }
         Repeater {
             model: root.appearChoices
             Rectangle {
@@ -3031,7 +3047,7 @@ Item {
         }
         FText { textFormat: Text.PlainText
             visible: !root.hd.unlocked && ac.sel !== "other"
-            text: "Loam is locked. Unlock your identity in Loam — until then your changes here wait on this device."
+            text: Fq.t("Loam is locked. Unlock your identity in Loam — until then your changes here wait on this device.")
             color: root.cYellow; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true }
     }
     property string newCalAppear: "ctx"
@@ -3112,7 +3128,7 @@ Item {
                 root.creatingCal = false
                 var id = String(root.j(r, ""))
                 newCalPopup.close()
-                if (id === "") { root.refresh(); root.notify("Couldn't create the calendar.", true); return }
+                if (id === "") { root.refresh(); root.notify(Fq.t("Couldn't create the calendar."), true); return }
                 if (Object.keys(meta).length > 0) root.coreAsync("updateCalendarMeta", [id, JSON.stringify(meta)], function () { root.refresh() })
                 else root.refresh()
             })
@@ -3120,7 +3136,7 @@ Item {
         ColumnLayout {
             anchors.fill: parent; spacing: Theme.spacing.small
 
-            DText { text: ("New calendar").toUpperCase(); color: root.cText; font.pixelSize: 30 }
+            DText { text: (Fq.t("New calendar")).toUpperCase(); color: root.cText; font.pixelSize: 30 }
 
             Flickable {
                 Layout.fillWidth: true
@@ -3132,18 +3148,18 @@ Item {
                     id: newCalBody
                     width: parent.width; spacing: Theme.spacing.small
 
-                    FText { text: "Name"; color: root.cFaint; font.pixelSize: 12 }
-                    Field { id: newCalName; Layout.fillWidth: true; placeholderText: "Calendar name" }
+                    FText { text: Fq.t("Name"); color: root.cFaint; font.pixelSize: 12 }
+                    Field { id: newCalName; Layout.fillWidth: true; placeholderText: Fq.t("Calendar name") }
 
-                    FText { text: "Description"; color: root.cFaint; font.pixelSize: 12 }
-                    Field { id: newCalDesc; Layout.fillWidth: true; placeholderText: "Optional description" }
+                    FText { text: Fq.t("Description"); color: root.cFaint; font.pixelSize: 12 }
+                    Field { id: newCalDesc; Layout.fillWidth: true; placeholderText: Fq.t("Optional description") }
 
                     AppearChooser {
                         visible: root.hd.exists; Layout.fillWidth: true
                         sel: root.newCalAppear; onPick: function (k) { root.newCalAppear = k }
                     }
                     // Author as — which loam identity OWNS + signs this calendar (loam ADR 0004).
-                    FText { text: "Author as"; color: root.cFaint; font.pixelSize: 12
+                    FText { text: Fq.t("Author as"); color: root.cFaint; font.pixelSize: 12
                         visible: !root.hd.exists || root.newCalAppear === "other" }
                     Flow {
                         visible: !root.hd.exists || root.newCalAppear === "other"
@@ -3158,28 +3174,28 @@ Item {
                                 border.width: 1
                                 border.color: (root.newCalIdentity === modelData.id || (root.newCalIdentity === "" && modelData.id === root.createDefaultOwner)) ? root.cBlue : root.cSurface2
                                 implicitHeight: chipT.implicitHeight + 10; implicitWidth: chipT.implicitWidth + 22
-                                FText { id: chipT; anchors.centerIn: parent; text: modelData.label; font.pixelSize: 12; color: root.cText }
+                                FText { id: chipT; anchors.centerIn: parent; text: Fq.t(modelData.label); font.pixelSize: 12; color: root.cText }
                                 MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.newCalIdentity = modelData.id }
                             }
                         }
                     }
-                    FText { text: "This identity owns the calendar and signs its events."; color: root.cFaint; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true
+                    FText { text: Fq.t("This identity owns the calendar and signs its events."); color: root.cFaint; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true
                         visible: !root.hd.exists || root.newCalAppear === "other" }
                     // Explain the divergence when the global default is a Keycard: we pre-select This device
                     // so creating a calendar doesn't force a card tap. Pick the Keycard chip to own it with the card.
                     FText {
                         visible: root.createDefaultOwner !== root.defaultIdentityId && root.newCalIdentity === "" && (!root.hd.exists || root.newCalAppear === "other")
-                        text: "Your default is a 🔑 Keycard — new calendars use This device unless you pick the card, so you're not asked to tap on every calendar."
+                        text: Fq.t("Your default is a 🔑 Keycard — new calendars use This device unless you pick the card, so you're not asked to tap on every calendar.")
                         color: root.cFaint; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true
                     }
 
                     Rectangle { Layout.fillWidth: true; height: 1; color: root.cSurface2; Layout.topMargin: 4 }
 
                     // ── custom fields editor (same as Calendar settings) ──
-                    FText { text: "Custom fields"; color: root.cText; font.pixelSize: 14; font.weight: Theme.typography.weightMedium }
+                    FText { text: Fq.t("Custom fields"); color: root.cText; font.pixelSize: 14; font.weight: Theme.typography.weightMedium }
                     FText {
                         visible: newCalSchemaModel.count === 0
-                        text: "Optional. Add typed fields to collect extra info on each event (venue, lineup…). You can also edit these later in the calendar's ⚙ settings."
+                        text: Fq.t("Optional. Add typed fields to collect extra info on each event (venue, lineup…). You can also edit these later in the calendar's ⚙ settings.")
                         color: root.cFaint; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true
                     }
                     Repeater {
@@ -3218,9 +3234,9 @@ Item {
                     Field {
                         id: ncNewOptions
                         visible: root.ncNewType === "enum"
-                        Layout.fillWidth: true; placeholderText: "enum options (comma-separated)"
+                        Layout.fillWidth: true; placeholderText: Fq.t("enum options (comma-separated)")
                     }
-                    FqButton { text: "+ Add field"; enabled: ncNewKey.text.trim().length > 0; onClicked: root.addNcField() }
+                    FqButton { text: Fq.t("+ Add field"); enabled: ncNewKey.text.trim().length > 0; onClicked: root.addNcField() }
 
                     ListModel { id: newCalSchemaModel }
                 }
@@ -3228,7 +3244,7 @@ Item {
 
             // Access — one 3-way tier (ADR 0019 ladder: Closed→Open→Collaborative) instead of two
             // independent toggles, so the off-ladder "collaborative + closed" combo can't be created.
-            FText { text: "Access"; color: root.cFaint; font.pixelSize: 12; Layout.topMargin: Theme.spacing.small }
+            FText { text: Fq.t("Access"); color: root.cFaint; font.pixelSize: 12; Layout.topMargin: Theme.spacing.small }
             Repeater {
                 model: root.accessTiers
                 Rectangle {
@@ -3262,9 +3278,9 @@ Item {
             RowLayout {
                 Layout.fillWidth: true; Layout.topMargin: Theme.spacing.small
                 Item { Layout.fillWidth: true }
-                FqButton { text: "Cancel"; onClicked: newCalPopup.close() }
+                FqButton { text: Fq.t("Cancel"); onClicked: newCalPopup.close() }
                 FqButton {
-                    text: "Create"; enabled: newCalName.text.trim().length > 0
+                    text: Fq.t("Create"); enabled: newCalName.text.trim().length > 0
                     onClicked: newCalPopup.createNow()
                 }
             }
@@ -3369,9 +3385,9 @@ Item {
         root.coreAsync("addMemberByIdentity", [setCalId, id, role], function (r) {
             root.memberBusy = false
             var res = root.j(r, null)
-            if (!res || !res.ok) { root.notify("Couldn't add: " + ((res && res.error) ? res.error : "no answer from the Scala core"), true); return }
+            if (!res || !res.ok) { root.notify(Fq.t("Couldn't add: ") + ((res && res.error) ? res.error : Fq.t("no answer from the Scala core")), true); return }
             setNewMember.text = ""
-            root.refresh(); root.notify("Added " + root.shortAuthor(res.member) + " as " + role + ".", false)
+            root.refresh(); root.notify(Fq.t("Added ") + root.shortAuthor(res.member) + " as " + role + ".", false)
         })
     }
     function removeMember(id) {
@@ -3380,7 +3396,7 @@ Item {
         root.coreAsync("removeMember", [setCalId, id], function (r) {
             root.memberBusy = false
             var ok = root.j(r, false) === true
-            root.refresh(); root.notify(ok ? "Removed " + root.shortAuthor(id) + "." : "Couldn't remove the member.", !ok)
+            root.refresh(); root.notify(ok ? Fq.t("Removed ") + root.shortAuthor(id) + "." : Fq.t("Couldn't remove the member."), !ok)
         })
     }
     // ── invite tickets (ADR 0022) ──
@@ -3398,7 +3414,7 @@ Item {
         root.coreAsync("createInvite", [calId, role], function (r) {
             root.inviteBusy = false
             var res = root.j(r, null)
-            if (!res || !res.ok) { root.notify("Couldn't create the invite: " + ((res && res.error) ? res.error : "no answer from the Scala core"), true); return }
+            if (!res || !res.ok) { root.notify(Fq.t("Couldn't create the invite: ") + ((res && res.error) ? res.error : Fq.t("no answer from the Scala core")), true); return }
             root.refresh()
             root.openInviteLink(root.calById(calId), role, res.link)
         })
@@ -3418,7 +3434,7 @@ Item {
         root.coreAsync("revokeInvite", [root.setCalId, ticket], function (r) {
             root.inviteBusy = false
             var ok = root.j(r, false) === true
-            root.refresh(); root.notify(ok ? "Invite withdrawn." : "Couldn't withdraw the invite.", !ok)
+            root.refresh(); root.notify(ok ? Fq.t("Invite withdrawn.") : Fq.t("Couldn't withdraw the invite."), !ok)
         })
     }
     function claimText(c) {
@@ -3437,7 +3453,7 @@ Item {
         ColumnLayout {
             anchors.fill: parent; spacing: Theme.spacing.small
 
-            DText { text: ("Calendar settings").toUpperCase(); color: root.cText; font.pixelSize: 30 }
+            DText { text: (Fq.t("Calendar settings")).toUpperCase(); color: root.cText; font.pixelSize: 30 }
 
             // scrollable body — this popup can get tall
             Flickable {
@@ -3451,18 +3467,18 @@ Item {
                     id: settingsBody
                     width: parent.width; spacing: Theme.spacing.small
 
-                    FText { text: "Name"; color: root.cFaint; font.pixelSize: 12 }
-                    Field { id: setName; Layout.fillWidth: true; placeholderText: "Calendar name" }
+                    FText { text: Fq.t("Name"); color: root.cFaint; font.pixelSize: 12 }
+                    Field { id: setName; Layout.fillWidth: true; placeholderText: Fq.t("Calendar name") }
 
-                    FText { text: "Description"; color: root.cFaint; font.pixelSize: 12 }
-                    Field { id: setDesc; Layout.fillWidth: true; placeholderText: "Optional description" }
+                    FText { text: Fq.t("Description"); color: root.cFaint; font.pixelSize: 12 }
+                    Field { id: setDesc; Layout.fillWidth: true; placeholderText: Fq.t("Optional description") }
 
                     Rectangle { Layout.fillWidth: true; height: 1; color: root.cSurface2; Layout.topMargin: 4 }
 
                     // ── signing identity (rebind) — which of MY identities signs my events here. The
                     // OWNER is fixed at creation; this only changes who I author as. Tapping a Keycard
                     // makes my future writes need a card tap.
-                    FText { text: "Signs as"; color: root.cText; font.pixelSize: 14; font.weight: Theme.typography.weightMedium }
+                    FText { text: Fq.t("Signs as"); color: root.cText; font.pixelSize: 14; font.weight: Theme.typography.weightMedium }
                     // A calendar bound to a Loam identity keeps it (switching would cost your role here).
                     FText { textFormat: Text.PlainText
                         visible: { var c = root.calById(root.setCalId); return !!c && !!c.binding }
@@ -3489,17 +3505,17 @@ Item {
                         }
                     }
                     FText { textFormat: Text.PlainText
-                        text: { var c = root.calById(root.setCalId); return (c && c.binding) ? "Your Loam identity for this calendar is fixed: your role here belongs to it."
+                        text: { var c = root.calById(root.setCalId); return (c && c.binding) ? Fq.t("Your Loam identity for this calendar is fixed: your role here belongs to it.")
                                                                                        : "Changes who signs your future events on this calendar; the owner is unchanged." }
                         color: root.cFaint; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true }
 
                     Rectangle { Layout.fillWidth: true; height: 1; color: root.cSurface2; Layout.topMargin: 4 }
 
                     // ── custom fields editor ──
-                    FText { text: "Custom fields"; color: root.cText; font.pixelSize: 14; font.weight: Theme.typography.weightMedium }
+                    FText { text: Fq.t("Custom fields"); color: root.cText; font.pixelSize: 14; font.weight: Theme.typography.weightMedium }
                     FText {
                         visible: setSchemaModel.count === 0
-                        text: "No custom fields yet. Add one below to collect extra info on each event."
+                        text: Fq.t("No custom fields yet. Add one below to collect extra info on each event.")
                         color: root.cFaint; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true
                     }
                     Repeater {
@@ -3540,21 +3556,21 @@ Item {
                     Field {
                         id: setNewOptions
                         visible: root.setNewType === "enum"
-                        Layout.fillWidth: true; placeholderText: "enum options (comma-separated)"
+                        Layout.fillWidth: true; placeholderText: Fq.t("enum options (comma-separated)")
                     }
-                    FqButton { text: "+ Add field"; enabled: setNewKey.text.trim().length > 0; onClicked: root.addSchemaField() }
+                    FqButton { text: Fq.t("+ Add field"); enabled: setNewKey.text.trim().length > 0; onClicked: root.addSchemaField() }
 
                     Rectangle { Layout.fillWidth: true; height: 1; color: root.cSurface2; Layout.topMargin: 4 }
 
                     // ── sharing & roles ──
-                    FText { text: "Sharing & roles"; color: root.cText; font.pixelSize: 14; font.weight: Theme.typography.weightMedium }
+                    FText { text: Fq.t("Sharing & roles"); color: root.cText; font.pixelSize: 14; font.weight: Theme.typography.weightMedium }
                     // Access tier (ADR 0019) — one 3-way choice (Closed→Open→Collaborative) instead of
                     // independent Open/Collaborative toggles, so the off-ladder "collaborative + closed"
                     // combo can't be produced. Same widget as the New-calendar dialog. Owner/editor only.
                     ColumnLayout {
                         visible: root.canManage(root.setCalId)
                         Layout.fillWidth: true; spacing: Theme.spacing.small
-                        FText { text: "Access"; color: root.cFaint; font.pixelSize: 12 }
+                        FText { text: Fq.t("Access"); color: root.cFaint; font.pixelSize: 12 }
                         Repeater {
                             model: root.accessTiers
                             Rectangle {
@@ -3584,7 +3600,7 @@ Item {
                         }
                     }
                     FText {
-                        text: "Invite people with a one-time link, or add someone by their identity. Editors can edit any event; viewers are read-only."
+                        text: Fq.t("Invite people with a one-time link, or add someone by their identity. Editors can edit any event; viewers are read-only.")
                         color: root.cFaint; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true
                     }
                     FText { textFormat: Text.PlainText
@@ -3595,12 +3611,12 @@ Item {
 
                     FText {
                         visible: { var c = root.calById(root.setCalId); return !!c && c.rolesConfigured === false }
-                        text: "No members yet — anyone with the calendar link can add events (and edit their own). Invite an editor to let someone edit everyone's; a viewer for read-only."
+                        text: Fq.t("No members yet — anyone with the calendar link can add events (and edit their own). Invite an editor to let someone edit everyone's; a viewer for read-only.")
                         color: root.cYellow; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true
                     }
 
                     // ── Members: owner + roles ──
-                    FText { text: "Members"; color: root.cFaint; font.pixelSize: 12 }
+                    FText { text: Fq.t("Members"); color: root.cFaint; font.pixelSize: 12 }
                     Repeater {
                         model: root.membersFor(root.setCalId)
                         delegate: Rectangle {
@@ -3608,12 +3624,12 @@ Item {
                             RowLayout {
                                 anchors.fill: parent; anchors.leftMargin: Theme.spacing.small; anchors.rightMargin: Theme.spacing.small; spacing: Theme.spacing.small
                                 FText { textFormat: Text.PlainText
-                                    text: root.shortAuthor(modelData.id) + (modelData.id === root.addrFor(root.calById(root.setCalId)) ? "  (you)" : "")
+                                    text: root.shortAuthor(modelData.id) + (modelData.id === root.addrFor(root.calById(root.setCalId)) ? Fq.t("  (you)") : "")
                                     color: root.cText; font.pixelSize: 13; Layout.fillWidth: true; elide: Text.ElideRight }
                                 FText { text: modelData.role; color: root.cSub; font.pixelSize: 12 }
                                 FText { textFormat: Text.PlainText
                                     visible: modelData.removable && root.canManage(root.setCalId)
-                                    text: "Remove"; color: root.memberBusy ? root.cFaint : root.cRed; font.pixelSize: 12
+                                    text: Fq.t("Remove"); color: root.memberBusy ? root.cFaint : root.cRed; font.pixelSize: 12
                                     MouseArea { anchors.fill: parent; anchors.margins: -4; cursorShape: Qt.PointingHandCursor; enabled: !root.memberBusy
                                         onClicked: root.removeMember(modelData.id) }
                                 }
@@ -3622,7 +3638,7 @@ Item {
                     }
 
                     // ── Pending invites (folded `invites`) ──
-                    FText { text: "Pending invites"; color: root.cFaint; font.pixelSize: 12
+                    FText { text: Fq.t("Pending invites"); color: root.cFaint; font.pixelSize: 12
                         visible: root.invitesFor(root.setCalId).length > 0 }
                     Repeater {
                         model: root.invitesFor(root.setCalId)
@@ -3630,18 +3646,18 @@ Item {
                             Layout.fillWidth: true; implicitHeight: 34; radius: 0; color: root.cMantle
                             RowLayout {
                                 anchors.fill: parent; anchors.leftMargin: Theme.spacing.small; anchors.rightMargin: Theme.spacing.small; spacing: Theme.spacing.small
-                                FText { text: "Invite · " + root.shortAuthor(modelData.ticket)
+                                FText { text: Fq.t("Invite · ") + root.shortAuthor(modelData.ticket)
                                     color: root.cText; font.pixelSize: 13; Layout.fillWidth: true; elide: Text.ElideRight }
                                 FText { text: modelData.role; color: root.cSub; font.pixelSize: 12 }
                                 FText { textFormat: Text.PlainText
                                     visible: modelData.link !== ""
-                                    text: "Link"; color: root.cBlue; font.pixelSize: 12
+                                    text: Fq.t("Link"); color: root.cBlue; font.pixelSize: 12
                                     MouseArea { anchors.fill: parent; anchors.margins: -4; cursorShape: Qt.PointingHandCursor
                                         onClicked: root.openInviteLink(root.calById(root.setCalId), modelData.role, modelData.link) }
                                 }
                                 FText { textFormat: Text.PlainText
                                     visible: root.canManage(root.setCalId)
-                                    text: "Revoke"; color: root.inviteBusy ? root.cFaint : root.cRed; font.pixelSize: 12
+                                    text: Fq.t("Revoke"); color: root.inviteBusy ? root.cFaint : root.cRed; font.pixelSize: 12
                                     MouseArea { anchors.fill: parent; anchors.margins: -4; cursorShape: Qt.PointingHandCursor; enabled: !root.inviteBusy
                                         onClicked: root.revokeInvite(modelData.ticket) }
                                 }
@@ -3653,15 +3669,15 @@ Item {
                     RowLayout {
                         visible: root.canManage(root.setCalId)
                         Layout.fillWidth: true; spacing: Theme.spacing.small
-                        FqButton { text: "Invite as editor"; enabled: !root.inviteBusy; onClicked: root.createInvite("editor") }
-                        FqButton { text: "Invite as viewer"; enabled: !root.inviteBusy; onClicked: root.createInvite("viewer") }
+                        FqButton { text: Fq.t("Invite as editor"); enabled: !root.inviteBusy; onClicked: root.createInvite("editor") }
+                        FqButton { text: Fq.t("Invite as viewer"); enabled: !root.inviteBusy; onClicked: root.createInvite("viewer") }
                         Item { Layout.fillWidth: true }
                     }
                     ColumnLayout {
                         visible: root.canManage(root.setCalId)
                         Layout.fillWidth: true; spacing: Theme.spacing.small
-                        FText { text: "Add by identity"; color: root.cFaint; font.pixelSize: 12 }
-                        Field { id: setNewMember; Layout.fillWidth: true; placeholderText: "loam://id?pub=… or a 0x… address" }
+                        FText { text: Fq.t("Add by identity"); color: root.cFaint; font.pixelSize: 12 }
+                        Field { id: setNewMember; Layout.fillWidth: true; placeholderText: Fq.t("loam://id?pub=… or a 0x… address") }
                         RowLayout {
                             Layout.fillWidth: true; spacing: 6
                             Repeater {
@@ -3691,16 +3707,16 @@ Item {
             }
             RowLayout {
                 Layout.fillWidth: true; Layout.topMargin: Theme.spacing.small; spacing: Theme.spacing.small
-                FText { text: "iCalendar"; color: root.cFaint; font.pixelSize: 12; Layout.alignment: Qt.AlignVCenter }
-                FqButton { text: "Export .ics"; onClicked: { calSettingsPopup.close(); icsSaveDialog.open() } }
-                FqButton { text: "Import .ics"; onClicked: { calSettingsPopup.close(); icsOpenDialog.open() } }
+                FText { text: Fq.t("iCalendar"); color: root.cFaint; font.pixelSize: 12; Layout.alignment: Qt.AlignVCenter }
+                FqButton { text: Fq.t("Export .ics"); onClicked: { calSettingsPopup.close(); icsSaveDialog.open() } }
+                FqButton { text: Fq.t("Import .ics"); onClicked: { calSettingsPopup.close(); icsOpenDialog.open() } }
                 Item { Layout.fillWidth: true }
             }
             RowLayout {
                 Layout.fillWidth: true; Layout.topMargin: Theme.spacing.small; spacing: Theme.spacing.small
                 Item { Layout.fillWidth: true }
-                FqButton { text: "Cancel"; onClicked: calSettingsPopup.close() }
-                FqButton { text: "Save"; onClicked: root.saveCalSettings() }
+                FqButton { text: Fq.t("Cancel"); onClicked: calSettingsPopup.close() }
+                FqButton { text: Fq.t("Save"); onClicked: root.saveCalSettings() }
             }
         }
     }
@@ -3714,19 +3730,19 @@ Item {
         onOpened: { joinLink.text = ""; root.joinIdentity = ""; root.joinAppear = "ctx"; root.joinBusy = false; root.refreshHd() }
         ColumnLayout {
             anchors.fill: parent; spacing: Theme.spacing.small
-            DText { text: ("Join a shared calendar").toUpperCase(); color: root.cText; font.pixelSize: 30 }
-            FText { text: "Paste the scala:// invite link"; color: root.cFaint; font.pixelSize: 12 }
+            DText { text: (Fq.t("Join a shared calendar")).toUpperCase(); color: root.cText; font.pixelSize: 30 }
+            FText { text: Fq.t("Paste the scala:// invite link"); color: root.cFaint; font.pixelSize: 12 }
             Field { id: joinLink; Layout.fillWidth: true; placeholderText: "scala://join?..." }
             FText { textFormat: Text.PlainText
                 visible: joinLink.text.indexOf("&inv=") >= 0
-                text: "This is an invite: you'll get the offered role under the identity you appear as. Calendars you already joined keep their identity."
+                text: Fq.t("This is an invite: you'll get the offered role under the identity you appear as. Calendars you already joined keep their identity.")
                 color: root.cSub; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true }
             AppearChooser {
                 visible: root.hd.exists; Layout.fillWidth: true; Layout.topMargin: Theme.spacing.small
                 sel: root.joinAppear; onPick: function (k) { root.joinAppear = k }
             }
             // Author as — which identity signs YOUR events on this calendar (owner stays the inviter).
-            FText { text: "Author as"; color: root.cFaint; font.pixelSize: 12; Layout.topMargin: Theme.spacing.small
+            FText { text: Fq.t("Author as"); color: root.cFaint; font.pixelSize: 12; Layout.topMargin: Theme.spacing.small
                 visible: !root.hd.exists || root.joinAppear === "other" }
             Flow {
                 visible: !root.hd.exists || root.joinAppear === "other"
@@ -3739,7 +3755,7 @@ Item {
                         border.width: 1
                         border.color: (root.joinIdentity === modelData.id || (root.joinIdentity === "" && modelData.id === root.defaultIdentityId)) ? root.cBlue : root.cSurface2
                         implicitHeight: jChipT.implicitHeight + 10; implicitWidth: jChipT.implicitWidth + 22
-                        FText { id: jChipT; anchors.centerIn: parent; text: modelData.label; font.pixelSize: 12; color: root.cText }
+                        FText { id: jChipT; anchors.centerIn: parent; text: Fq.t(modelData.label); font.pixelSize: 12; color: root.cText }
                         MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.joinIdentity = modelData.id }
                     }
                 }
@@ -3747,9 +3763,9 @@ Item {
             RowLayout {
                 Layout.fillWidth: true; Layout.topMargin: Theme.spacing.small
                 Item { Layout.fillWidth: true }
-                FqButton { text: "Cancel"; onClicked: joinPopup.close() }
+                FqButton { text: Fq.t("Cancel"); onClicked: joinPopup.close() }
                 FqButton {
-                    text: "Join"; enabled: joinLink.text.trim().length > 0 && !root.joinBusy
+                    text: Fq.t("Join"); enabled: joinLink.text.trim().length > 0 && !root.joinBusy
                     onClicked: {
                         if (root.joinBusy) return
                         root.joinBusy = true
@@ -3759,7 +3775,7 @@ Item {
                             root.joinBusy = false
                             var ok = root.j(r, false) === true
                             root.refresh()
-                            root.notify(!ok ? "Couldn't join — check the link."
+                            root.notify(!ok ? Fq.t("Couldn't join — check the link.")
                                         : (isInvite ? "Calendar joined — your role arrives once the invite has synced." : "Calendar joined."), !ok)
                         })
                     }
@@ -3858,7 +3874,7 @@ Item {
         ColumnLayout {
             anchors.fill: parent; spacing: Theme.spacing.small
             DText { id: shareTitle; text: ("").toUpperCase(); color: root.cText; font.pixelSize: 30 }
-            FText { text: "Scan this on the phone, or copy the link:"; color: root.cFaint; font.pixelSize: 12 }
+            FText { text: Fq.t("Scan this on the phone, or copy the link:"); color: root.cFaint; font.pixelSize: 12 }
             Rectangle {
                 Layout.alignment: Qt.AlignHCenter
                 width: 440; height: 440; radius: 0; color: "#ffffff"
@@ -3881,10 +3897,10 @@ Item {
             FText { id: shareStatus; text: ""; visible: text !== ""; color: root.cFaint; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true }
             RowLayout {
                 Layout.fillWidth: true; Layout.topMargin: Theme.spacing.small
-                FqButton { text: "＋ Snapshot"; visible: !root.shareIsInvite; onClicked: root.shareWithSnapshot() }
+                FqButton { text: Fq.t("＋ Snapshot"); visible: !root.shareIsInvite; onClicked: root.shareWithSnapshot() }
                 Item { Layout.fillWidth: true }
-                FqButton { text: "Copy"; enabled: shareLink.text !== ""; onClicked: { shareLink.selectAll(); shareLink.copy(); shareLink.deselect(); root.notify("Link copied.", false) } }
-                FqButton { text: "Close"; onClicked: sharePopup.close() }
+                FqButton { text: Fq.t("Copy"); enabled: shareLink.text !== ""; onClicked: { shareLink.selectAll(); shareLink.copy(); shareLink.deselect(); root.notify(Fq.t("Link copied."), false) } }
+                FqButton { text: Fq.t("Close"); onClicked: sharePopup.close() }
             }
         }
     }
@@ -3907,16 +3923,16 @@ Item {
         background: Rectangle { radius: 0; color: root.cSurface; border.width: 1; border.color: root.cSurface2 }
         ColumnLayout {
             anchors.fill: parent; spacing: Theme.spacing.small
-            DText { text: ("Delete calendar?").toUpperCase(); color: root.cText; font.pixelSize: 30 }
+            DText { text: (Fq.t("Delete calendar?")).toUpperCase(); color: root.cText; font.pixelSize: 30 }
             FText {
-                text: "Remove \"" + (root.pendingDeleteCal ? (root.pendingDeleteCal.name || "calendar") : "") + "\" from this device. Its local events are deleted. Peers who joined keep their own copy."
+                text: Fq.t("Remove \"") + (root.pendingDeleteCal ? (root.pendingDeleteCal.name || "calendar") : "") + Fq.t("\" from this device. Its local events are deleted. Peers who joined keep their own copy.")
                 color: root.cFaint; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true
             }
             RowLayout {
                 Layout.fillWidth: true; Layout.topMargin: Theme.spacing.small
                 Item { Layout.fillWidth: true }
-                FqButton { text: "Cancel"; onClicked: { root.pendingDeleteCal = null; deletePopup.close() } }
-                FqButton { text: "Delete"; onClicked: root.deleteCalendar() }
+                FqButton { text: Fq.t("Cancel"); onClicked: { root.pendingDeleteCal = null; deletePopup.close() } }
+                FqButton { text: Fq.t("Delete"); onClicked: root.deleteCalendar() }
             }
         }
     }
@@ -3928,9 +3944,9 @@ Item {
         background: Rectangle { radius: 0; color: root.cSurface; border.width: 1; border.color: root.cSurface2 }
         ColumnLayout {
             anchors.fill: parent; spacing: Theme.spacing.small
-            DText { text: ("Delete event?").toUpperCase(); color: root.cText; font.pixelSize: 30 }
+            DText { text: (Fq.t("Delete event?")).toUpperCase(); color: root.cText; font.pixelSize: 30 }
             FText {
-                text: "Delete \"" + (root.editingEvent ? (root.editingEvent.title || "(untitled)") : "")
+                text: Fq.t("Delete \"") + (root.editingEvent ? (root.editingEvent.title || Fq.t("(untitled)")) : "")
                     + "\"" + ((root.editingEvent && root.editingEvent.recur) ? " and its whole repeating series" : "")
                     + ". This can't be undone."
                 color: root.cFaint; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true
@@ -3938,8 +3954,8 @@ Item {
             RowLayout {
                 Layout.fillWidth: true; Layout.topMargin: Theme.spacing.small
                 Item { Layout.fillWidth: true }
-                FqButton { text: "Cancel"; onClicked: deleteEventPopup.close() }
-                FqButton { text: "Delete"; onClicked: root.doDeleteEvent() }
+                FqButton { text: Fq.t("Cancel"); onClicked: deleteEventPopup.close() }
+                FqButton { text: Fq.t("Delete"); onClicked: root.doDeleteEvent() }
             }
         }
     }
@@ -3956,35 +3972,35 @@ Item {
         onOpened: root.loadDiag()
         ColumnLayout {
             anchors.fill: parent; spacing: Theme.spacing.small
-            DText { text: ("Diagnostics").toUpperCase(); color: root.cText; font.pixelSize: 30 }
+            DText { text: (Fq.t("Diagnostics")).toUpperCase(); color: root.cText; font.pixelSize: 30 }
 
             RowLayout {
                 Layout.fillWidth: true; spacing: Theme.spacing.medium
                 Rectangle { width: 10; height: 10; radius: 0; color: (root.diag && root.diag.nodeReady) ? root.cGreen : root.cYellow; Layout.alignment: Qt.AlignVCenter }
-                FText { text: (root.diag && root.diag.nodeReady) ? "Delivery node connected" : "Node not ready"; color: root.cText; font.pixelSize: 14 }
+                FText { text: (root.diag && root.diag.nodeReady) ? Fq.t("Delivery node connected") : Fq.t("Node not ready"); color: root.cText; font.pixelSize: 14 }
                 Item { Layout.fillWidth: true }
-                FqButton { text: "Refresh"; onClicked: root.loadDiag() }
+                FqButton { text: Fq.t("Refresh"); onClicked: root.loadDiag() }
             }
             FText {
-                text: root.diag ? ("delivery: " + (root.diag.deliveryStatus || "(none)") + "   ·   context ready: " + (root.diag.ctxReady ? "yes" : "NO")) : "—"
+                text: root.diag ? (Fq.t("delivery: ") + (root.diag.deliveryStatus || Fq.t("(none)")) + Fq.t("   ·   context ready: ") + (root.diag.ctxReady ? "yes" : Fq.t("NO"))) : "—"
                 color: root.cSub; font.pixelSize: 12
             }
             FText {
-                text: root.diag ? (root.diag.calendarCount + " calendar(s) · " + root.diag.eventCount + " event(s) total") : "—"
+                text: root.diag ? (root.diag.calendarCount + Fq.t(" calendar(s) · ") + root.diag.eventCount + Fq.t(" event(s) total")) : "—"
                 color: root.cSub; font.pixelSize: 12
             }
             FText {
-                text: root.diag ? ("data: " + (root.diag.dataDir || "?")) : ""
+                text: root.diag ? (Fq.t("data: ") + (root.diag.dataDir || "?")) : ""
                 color: root.cFaint; font.pixelSize: 12; elide: Text.ElideMiddle; Layout.fillWidth: true
             }
-            FText { text: "Your identity (share this to be added to a calendar)"; color: root.cFaint; font.pixelSize: 12 }
+            FText { text: Fq.t("Your identity (share this to be added to a calendar)"); color: root.cFaint; font.pixelSize: 12 }
             RowLayout {
                 Layout.fillWidth: true; spacing: Theme.spacing.small
-                Field { id: diagIdField; text: root.diag ? (root.diag.identity || root.myIdentity || "(none)") : root.myIdentity; Layout.fillWidth: true; readOnly: true; selectByMouse: true }
-                FqButton { text: "Copy"; onClicked: { diagIdField.selectAll(); diagIdField.copy() } }
+                Field { id: diagIdField; text: root.diag ? (root.diag.identity || root.myIdentity || Fq.t("(none)")) : root.myIdentity; Layout.fillWidth: true; readOnly: true; selectByMouse: true }
+                FqButton { text: Fq.t("Copy"); onClicked: { diagIdField.selectAll(); diagIdField.copy() } }
             }
 
-            FText { text: "Per-calendar sync"; color: root.cFaint; font.pixelSize: 12; Layout.topMargin: Theme.spacing.small }
+            FText { text: Fq.t("Per-calendar sync"); color: root.cFaint; font.pixelSize: 12; Layout.topMargin: Theme.spacing.small }
             ListView {
                 Layout.fillWidth: true; Layout.fillHeight: true; clip: true
                 model: (root.diag && root.diag.calendars) ? root.diag.calendars : []
@@ -3995,12 +4011,12 @@ Item {
                         anchors.fill: parent; anchors.leftMargin: Theme.spacing.small; anchors.rightMargin: Theme.spacing.small; spacing: Theme.spacing.small
                         Rectangle { width: 8; height: 8; radius: 0; color: modelData.syncing ? root.cGreen : root.cFaint }
                         FText { text: modelData.name || modelData.id; color: root.cText; font.pixelSize: 13; Layout.fillWidth: true; elide: Text.ElideRight }
-                        FText { text: (modelData.events || 0) + " ev"; color: root.cFaint; font.pixelSize: 12 }
-                        FText { text: modelData.shared ? (modelData.syncing ? "syncing" : "offline") : "local"; color: modelData.syncing ? root.cGreen : root.cFaint; font.pixelSize: 12 }
+                        FText { text: (modelData.events || 0) + Fq.t(" ev"); color: root.cFaint; font.pixelSize: 12 }
+                        FText { text: Fq.t(modelData.shared ? (modelData.syncing ? "syncing" : "offline") : "local"); color: modelData.syncing ? root.cGreen : root.cFaint; font.pixelSize: 12 }
                     }
                 }
             }
-            RowLayout { Layout.fillWidth: true; Item { Layout.fillWidth: true } FqButton { text: "Close"; onClicked: diagPopup.close() } }
+            RowLayout { Layout.fillWidth: true; Item { Layout.fillWidth: true } FqButton { text: Fq.t("Close"); onClicked: diagPopup.close() } }
         }
     }
 
@@ -4015,7 +4031,7 @@ Item {
         ColumnLayout {
             width: parent.width; spacing: Theme.spacing.medium
             FText {
-                text: keycardOverlay.failed ? "⚠️  Keycard error"
+                text: keycardOverlay.failed ? Fq.t("⚠️  Keycard error")
                       : (keycardOverlay.enrolling ? "💳  Enrolling your Keycard" : "💳  Sign with your Keycard")
                 color: root.cText; font.pixelSize: 18; font.weight: Theme.typography.weightMedium
             }
@@ -4030,7 +4046,7 @@ Item {
             }
             FText {
                 Layout.fillWidth: true; wrapMode: Text.WordWrap; horizontalAlignment: Text.AlignHCenter
-                text: keycardOverlay.failed ? (root.kc.error || "The Keycard operation failed.")
+                text: keycardOverlay.failed ? (root.kc.error || Fq.t("The Keycard operation failed."))
                       : "Hold your Keycard to the reader and approve the request in the Keycard UI (enter your PIN there)."
                 color: keycardOverlay.failed ? root.cRed : root.cFaint; font.pixelSize: 13
             }
@@ -4038,7 +4054,7 @@ Item {
                 Layout.fillWidth: true; Layout.topMargin: Theme.spacing.small
                 Item { Layout.fillWidth: true }
                 FqButton {
-                    text: keycardOverlay.failed ? "Close" : "Cancel"
+                    text: keycardOverlay.failed ? Fq.t("Close") : Fq.t("Cancel")
                     onClicked: { keycardOverlay.close(); if (root.kc && root.kc.ref) root.kcLastRef = root.kc.ref }
                 }
             }

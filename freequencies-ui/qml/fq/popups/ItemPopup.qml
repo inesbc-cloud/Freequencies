@@ -45,45 +45,45 @@ Win {
     function extraData() { return ({ cat: cat, done: done, channel: channel }) }
     function save() {
         var w = whenOf()
-        if (w === undefined) { app.notify("Use a date like 2026-11-24 and a time like 18:00.", true); return }
+        if (w === undefined) { app.notify(Fq.t("Use a date like 2026-11-24 and a time like 18:00."), true); return }
         var r = kind === "budget" ? Money.parse(textIn.text, amountIn.text, curIn.text, dir) : Checklist.parse(kind, textIn.text, w, extraData())
         if (r.error) { app.notify(r.error, true); return }
         app.postItem(night, Ext.item(kind, night.id, r.data, id_ || (kind + ":" + Ext.rnd())), id_ ? "Updated" : "Added", function (ok) { if (ok) ip.close() })
     }
 
-    Label_ { text: ip.kind === "gear" ? "ITEM" : ip.kind === "post" ? "POST" : ip.kind === "budget" ? "WHAT" : "TASK" }
+    Label_ { text: ip.kind === "gear" ? Fq.t("ITEM") : ip.kind === "post" ? Fq.t("POST") : ip.kind === "budget" ? Fq.t("WHAT") : Fq.t("TASK") }
     Field { id: textIn; Layout.fillWidth: true; onAccepted: ip.save() }
     ColumnLayout {
         visible: ip.kind === "task" || ip.kind === "post"; Layout.fillWidth: true; spacing: 7
         RowLayout {
             Layout.fillWidth: true; spacing: 8
-            ColumnLayout { Layout.fillWidth: true; spacing: 4; Label_ { text: ip.kind === "post" ? "GOES OUT ON" : "DEADLINE" } Field { id: dateIn; Layout.fillWidth: true; placeholderText: "2026-11-24" } }
-            ColumnLayout { spacing: 4; Label_ { text: "AT" } Field { id: timeIn; Layout.preferredWidth: 90 } }
+            ColumnLayout { Layout.fillWidth: true; spacing: 4; Label_ { text: ip.kind === "post" ? Fq.t("GOES OUT ON") : Fq.t("DEADLINE") } Field { id: dateIn; Layout.fillWidth: true; placeholderText: "2026-11-24" } }
+            ColumnLayout { spacing: 4; Label_ { text: Fq.t("AT") } Field { id: timeIn; Layout.preferredWidth: 90 } }
         }
-        Label_ { text: ip.kind === "post" ? "CHANNEL" : "KIND" }
+        Label_ { text: ip.kind === "post" ? Fq.t("CHANNEL") : Fq.t("KIND") }
         Flow { Layout.fillWidth: true; spacing: 6
             Repeater { model: ip.kind === "post" ? Checklist.channels : Checklist.taskCats
-                delegate: Chip { required property var modelData; text: modelData; on: ip.kind === "post" ? ip.channel === modelData : ip.cat === modelData
+                delegate: Chip { required property var modelData; text: Fq.t(modelData); on: ip.kind === "post" ? ip.channel === modelData : ip.cat === modelData
                     onClicked: { if (ip.kind === "post") ip.channel = modelData; else ip.cat = modelData } } } }
     }
     ColumnLayout {
         visible: ip.kind === "budget"; Layout.fillWidth: true; spacing: 7
         Flow { Layout.fillWidth: true; spacing: 6
-            Chip { text: "Cost (out)"; on: ip.dir === "out"; onClicked: ip.dir = "out" }
-            Chip { text: "Income (in)"; on: ip.dir === "in"; onClicked: ip.dir = "in" } }
+            Chip { text: Fq.t("Cost (out)"); on: ip.dir === "out"; onClicked: ip.dir = "out" }
+            Chip { text: Fq.t("Income (in)"); on: ip.dir === "in"; onClicked: ip.dir = "in" } }
         RowLayout {
             Layout.fillWidth: true; spacing: 8
-            ColumnLayout { Layout.fillWidth: true; spacing: 4; Label_ { text: "AMOUNT" } Field { id: amountIn; Layout.fillWidth: true; placeholderText: "250" } }
-            ColumnLayout { spacing: 4; Label_ { text: "CURRENCY" } Field { id: curIn; Layout.preferredWidth: 90 } }
+            ColumnLayout { Layout.fillWidth: true; spacing: 4; Label_ { text: Fq.t("AMOUNT") } Field { id: amountIn; Layout.fillWidth: true; placeholderText: "250" } }
+            ColumnLayout { spacing: 4; Label_ { text: Fq.t("CURRENCY") } Field { id: curIn; Layout.preferredWidth: 90 } }
         }
     }
     Flow { visible: ip.kind !== "budget"; Layout.fillWidth: true; spacing: 6
-        Chip { text: ip.kind === "gear" ? "Packed" : ip.kind === "post" ? "Posted" : "Done"; on: ip.done; onClicked: ip.done = !ip.done } }
+        Chip { text: ip.kind === "gear" ? Fq.t("Packed") : ip.kind === "post" ? Fq.t("Posted") : Fq.t("Done"); on: ip.done; onClicked: ip.done = !ip.done } }
     RowLayout {
         Layout.fillWidth: true; Layout.topMargin: 8; spacing: 8
-        FqButton { visible: ip.id_ !== ""; text: "Remove"; onClicked: ip.app.deleteItem(ip.night, ip.id_, "Removed", function (ok) { if (ok) ip.close() }) }
+        FqButton { visible: ip.id_ !== ""; text: Fq.t("Remove"); onClicked: ip.app.deleteItem(ip.night, ip.id_, Fq.t("Removed"), function (ok) { if (ok) ip.close() }) }
         Item { Layout.fillWidth: true }
-        FqButton { text: "Cancel"; onClicked: ip.close() }
-        FqButton { text: ip.id_ ? "Save" : "Add"; primary: true; enabled: !ip.app || !ip.app.extBusy; onClicked: ip.save() }
+        FqButton { text: Fq.t("Cancel"); onClicked: ip.close() }
+        FqButton { text: ip.id_ ? Fq.t("Save") : "Add"; primary: true; enabled: !ip.app || !ip.app.extBusy; onClicked: ip.save() }
     }
 }

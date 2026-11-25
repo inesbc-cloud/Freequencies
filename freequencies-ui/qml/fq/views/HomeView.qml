@@ -16,7 +16,7 @@ Rectangle {
     color: Fq.ground
     readonly property double now: app.nowTick
     readonly property var occs: app.expandEvents(app.freqNights, now - 86400000, now + 60 * 86400000)
-    readonly property var items: Home.attention(occs, app.fundingAnchor, now)
+    readonly property var items: Home.attention(occs, app.fundingAnchor, now, Fq.t)
     readonly property var soon: Home.upcoming(occs, now, 21)
     readonly property var st: Home.stats(occs, now)
     readonly property var elsewhere: app.listingEvents.filter(function (e) { return e.startTime >= now - 3600000 && e.startTime <= now + 7 * 86400000 }).sort(function (a, b) { return a.startTime - b.startTime }).slice(0, 8)
@@ -35,21 +35,21 @@ Rectangle {
                 Layout.fillWidth: true; spacing: 12
                 ColumnLayout {
                     spacing: -4
-                    FText { text: Qt.formatDate(new Date(hv.now), "dddd d MMMM").toUpperCase(); color: Fq.sub; font.pixelSize: 12; font.letterSpacing: 1.4 }
-                    DText { text: hv.items.length ? hv.items.length + (hv.items.length === 1 ? " THING NEEDS YOU" : " THINGS NEED YOU") : "ALL CALM"; font.pixelSize: 44; color: Fq.lime }
+                    FText { text: Fq.fmtDate(new Date(hv.now), "dddd d MMMM").toUpperCase(); color: Fq.sub; font.pixelSize: 12; font.letterSpacing: 1.4 }
+                    DText { text: hv.items.length ? hv.items.length + (hv.items.length === 1 ? Fq.t(" THING NEEDS YOU") : Fq.t(" THINGS NEED YOU")) : Fq.t("ALL CALM"); font.pixelSize: 44; color: Fq.lime }
                 }
                 Item { Layout.fillWidth: true }
-                FqButton { text: "+ Event"; primary: true; onClicked: hv.app.openQuickNight() }
-                FqButton { text: "Production"; onClicked: hv.app.openProduction(null) }
-                FqButton { text: "Calendar"; onClicked: hv.app.showCalendar("month") }
+                FqButton { text: Fq.t("+ Event"); primary: true; onClicked: hv.app.openQuickNight() }
+                FqButton { text: Fq.t("Production"); onClicked: hv.app.openProduction(null) }
+                FqButton { text: Fq.t("Calendar"); onClicked: hv.app.showCalendar("month") }
             }
 
             // numbers
             GridLayout {
                 Layout.fillWidth: true; columns: Math.max(2, Math.min(4, Math.floor(col.width / 220))); columnSpacing: -1; rowSpacing: -1
                 Repeater {
-                    model: [{ n: hv.st.next30, l: "events in the next 30 days" }, { n: hv.st.confirmed, l: "confirmed" },
-                            { n: hv.st.holds, l: "still on hold" }, { n: hv.app.fundingAnchor ? hv.items.filter(function (x) { return !!x.link }).length : 0, l: "funding calls closing soon" }]
+                    model: [{ n: hv.st.next30, l: Fq.t("events in the next 30 days") }, { n: hv.st.confirmed, l: Fq.t("confirmed") },
+                            { n: hv.st.holds, l: Fq.t("still on hold") }, { n: hv.app.fundingAnchor ? hv.items.filter(function (x) { return !!x.link }).length : 0, l: Fq.t("funding calls closing soon") }]
                     delegate: Rectangle {
                         required property var modelData
                         Layout.fillWidth: true; Layout.preferredHeight: 84; color: Fq.mantle; border.width: 1; border.color: Fq.line
@@ -65,9 +65,9 @@ Rectangle {
                 // needs attention
                 ColumnLayout {
                     Layout.fillWidth: true; Layout.preferredWidth: 3; Layout.alignment: Qt.AlignTop; spacing: 6
-                    Sec { label: "Needs attention" }
+                    Sec { label: Fq.t("Needs attention") }
                     FText { visible: hv.items.length === 0; Layout.fillWidth: true; wrapMode: Text.Wrap; color: Fq.sub; font.pixelSize: 13
-                        text: "Nothing overdue, no holds about to slip. Plan the next one: + Event, then Production." }
+                        text: Fq.t("Nothing overdue, no holds about to slip. Plan the next one: + Event, then Production.") }
                     Repeater {
                         model: hv.items.slice(0, 24)
                         delegate: Rectangle {
@@ -89,7 +89,7 @@ Rectangle {
                                     Layout.fillWidth: true
                                     FText { Layout.fillWidth: true; elide: Text.ElideRight; font.pixelSize: 14; textFormat: Text.PlainText; text: at.modelData.text }
                                     FText { visible: !!at.modelData.when; color: Fq.faint; font.pixelSize: 12
-                                        text: at.modelData.when ? Qt.formatDate(new Date(at.modelData.when), "ddd d MMM") : "" }
+                                        text: at.modelData.when ? Fq.fmtDate(new Date(at.modelData.when), "ddd d MMM") : "" }
                                 }
                                 FText { visible: at.modelData.sub !== ""; Layout.fillWidth: true; elide: Text.ElideRight; color: Fq.sub; font.pixelSize: 12; textFormat: Text.PlainText; text: at.modelData.sub }
                             }
@@ -99,8 +99,8 @@ Rectangle {
                 // coming up
                 ColumnLayout {
                     Layout.fillWidth: true; Layout.preferredWidth: 2; Layout.alignment: Qt.AlignTop; spacing: 6
-                    Sec { label: "Coming up (3 weeks)" }
-                    FText { visible: hv.soon.length === 0; Layout.fillWidth: true; wrapMode: Text.Wrap; color: Fq.sub; font.pixelSize: 13; text: "No events in the next three weeks." }
+                    Sec { label: Fq.t("Coming up (3 weeks)") }
+                    FText { visible: hv.soon.length === 0; Layout.fillWidth: true; wrapMode: Text.Wrap; color: Fq.sub; font.pixelSize: 13; text: Fq.t("No events in the next three weeks.") }
                     Repeater {
                         model: hv.soon
                         delegate: Rectangle {
@@ -116,18 +116,18 @@ Rectangle {
                             RowLayout {
                                 id: upr
                                 x: 16; y: 9; width: parent.width - 28; spacing: 12
-                                DText { text: Qt.formatDate(new Date(up.modelData.startTime), "dd.MM"); font.pixelSize: 30; Layout.alignment: Qt.AlignTop }
+                                DText { text: Fq.fmtDate(new Date(up.modelData.startTime), "dd.MM"); font.pixelSize: 30; Layout.alignment: Qt.AlignTop }
                                 ColumnLayout {
                                     Layout.fillWidth: true; spacing: 1
-                                    FText { Layout.fillWidth: true; elide: Text.ElideRight; font.pixelSize: 14; font.bold: true; textFormat: Text.PlainText; text: up.modelData.title || "(untitled)" }
+                                    FText { Layout.fillWidth: true; elide: Text.ElideRight; font.pixelSize: 14; font.bold: true; textFormat: Text.PlainText; text: up.modelData.title || Fq.t("(untitled)") }
                                     FText { Layout.fillWidth: true; elide: Text.ElideRight; color: Fq.sub; font.pixelSize: 12; textFormat: Text.PlainText
-                                        text: [Qt.formatDate(new Date(up.modelData.startTime), "ddd") + " " + Qt.formatTime(new Date(up.modelData.startTime), "hh:mm"),
-                                               Nights.fieldOf(up.modelData, "venue"), Nights.fieldOf(up.modelData, "status"), Details.summary(Details.detailsOf(up.master))].filter(function (x) { return !!x }).join(" · ") }
+                                        text: [Fq.fmtDate(new Date(up.modelData.startTime), "ddd") + " " + Fq.fmtTime(new Date(up.modelData.startTime), "hh:mm"),
+                                               Nights.fieldOf(up.modelData, "venue"), Fq.t(Nights.fieldOf(up.modelData, "status")), Details.summary(Details.detailsOf(up.master), Fq.t)].filter(function (x) { return !!x }).join(" · ") }
                                     RowLayout {
                                         Layout.fillWidth: true; spacing: 8; Layout.topMargin: 3
                                         Rectangle { visible: !!up.prog && up.prog.total > 0; Layout.preferredWidth: 90; Layout.preferredHeight: 4; color: Fq.line
                                             Rectangle { height: parent.height; width: up.prog && up.prog.total ? parent.width * up.prog.done / up.prog.total : 0; color: Fq.lime } }
-                                        Link { text: up.plan ? "production " + up.prog.done + "/" + up.prog.total : "plan it →"; tone: up.plan ? Fq.sub : Fq.acid
+                                        Link { text: up.plan ? Fq.t("production ") + up.prog.done + "/" + up.prog.total : Fq.t("plan it →"); tone: up.plan ? Fq.sub : Fq.acid
                                             onClicked: hv.app.openProduction(up.master) }
                                     }
                                 }
@@ -135,7 +135,7 @@ Rectangle {
                         }
                     }
                     // elsewhere in Lisbon: public listings this week (pink)
-                    Sec { visible: hv.elsewhere.length > 0; label: "Elsewhere in Lisbon (7 days)"; Layout.topMargin: 12 }
+                    Sec { visible: hv.elsewhere.length > 0; label: Fq.t("Elsewhere in Lisbon (7 days)"); Layout.topMargin: 12 }
                     Repeater {
                         model: hv.elsewhere
                         delegate: Rectangle {
@@ -149,7 +149,7 @@ Rectangle {
                             RowLayout {
                                 id: elr
                                 x: 14; y: 6; width: parent.width - 24; spacing: 10
-                                FText { text: Qt.formatDate(new Date(el.e.startTime), "ddd d") + " " + Qt.formatTime(new Date(el.e.startTime), "hh:mm"); color: Fq.pink; font.pixelSize: 12; Layout.preferredWidth: 96 }
+                                FText { text: Fq.fmtDate(new Date(el.e.startTime), "ddd d") + " " + Fq.fmtTime(new Date(el.e.startTime), "hh:mm"); color: Fq.pink; font.pixelSize: 12; Layout.preferredWidth: 96 }
                                 FText { Layout.fillWidth: true; elide: Text.ElideRight; font.pixelSize: 13; textFormat: Text.PlainText
                                     text: (el.e.title || "") + (Listings.venueOf(el.e) ? "  ·  " + Listings.venueOf(el.e) : "") }
                             }

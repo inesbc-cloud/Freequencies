@@ -18,10 +18,10 @@ ColumnLayout {
 
     Flow {
         Layout.fillWidth: true; spacing: 6
-        FText { text: "COLUMNS"; color: Fq.faint; font.pixelSize: 12; font.letterSpacing: 1.2; height: 26; verticalAlignment: Text.AlignVCenter }
-        Repeater { model: [{ id: "venue", l: "Venue" }, { id: "status", l: "Status" }, { id: "calendar", l: "Calendar" }]
-            delegate: Chip { required property var modelData; text: modelData.l; on: bv.app.laneBy === modelData.id; onClicked: bv.app.laneBy = modelData.id } }
-        FText { text: "· drop an event in another column to change its " + bv.app.laneBy; color: Fq.faint; font.pixelSize: 12; height: 26; verticalAlignment: Text.AlignVCenter
+        FText { text: Fq.t("COLUMNS"); color: Fq.faint; font.pixelSize: 12; font.letterSpacing: 1.2; height: 26; verticalAlignment: Text.AlignVCenter }
+        Repeater { model: [{ id: "venue", l: Fq.t("Venue") }, { id: "status", l: Fq.t("Status") }, { id: "calendar", l: Fq.t("Calendar") }]
+            delegate: Chip { required property var modelData; text: Fq.t(modelData.l); on: bv.app.laneBy === modelData.id; onClicked: bv.app.laneBy = modelData.id } }
+        FText { text: Fq.t("· drop an event in another column to change its ") + bv.app.laneBy; color: Fq.faint; font.pixelSize: 12; height: 26; verticalAlignment: Text.AlignVCenter
                 visible: bv.app.laneBy !== "calendar" }
     }
     Flickable {
@@ -30,7 +30,7 @@ ColumnLayout {
         boundsBehavior: Flickable.StopAtBounds
         ScrollBar.vertical: ScrollBar {}
         ScrollBar.horizontal: ScrollBar {}
-        FText { visible: bv.grid.lanes.length === 0; text: "No events in these two weeks. Add one with “+ Event”."; color: Fq.sub; font.pixelSize: 14 }
+        FText { visible: bv.grid.lanes.length === 0; text: Fq.t("No events in these two weeks. Add one with “+ Event”."); color: Fq.sub; font.pixelSize: 14 }
         Column {
             id: board
             Row {
@@ -41,7 +41,7 @@ ColumnLayout {
                         required property var modelData
                         width: bv.cellW; height: 32
                         DText { x: 6; width: bv.cellW - 12; anchors.verticalCenter: parent.verticalCenter; elide: Text.ElideRight; font.pixelSize: 20
-                                text: parent.modelData.label.toUpperCase() }
+                                text: Fq.t(parent.modelData.label).toUpperCase() }
                     }
                 }
             }
@@ -58,8 +58,8 @@ ColumnLayout {
                         color: dayRow.weekend ? Fq.mantle : "transparent"; border.width: 1; border.color: Fq.line
                         Column {
                             x: 8; anchors.verticalCenter: parent.verticalCenter; spacing: -3
-                            FText { text: Qt.formatDate(new Date(dayRow.modelData.date), "ddd").toUpperCase(); color: dayRow.isToday ? Fq.lime : Fq.faint; font.pixelSize: 12; font.letterSpacing: 1.2 }
-                            DText { text: Qt.formatDate(new Date(dayRow.modelData.date), "dd.MM"); color: dayRow.isToday ? Fq.lime : Fq.sub; font.pixelSize: 22 }
+                            FText { text: Fq.fmtDate(new Date(dayRow.modelData.date), "ddd").toUpperCase(); color: dayRow.isToday ? Fq.lime : Fq.faint; font.pixelSize: 12; font.letterSpacing: 1.2 }
+                            DText { text: Fq.fmtDate(new Date(dayRow.modelData.date), "dd.MM"); color: dayRow.isToday ? Fq.lime : Fq.sub; font.pixelSize: 22 }
                         }
                     }
                     Row {

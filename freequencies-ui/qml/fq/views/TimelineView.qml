@@ -19,8 +19,8 @@ ColumnLayout {
     spacing: 8
     Flow {
         Layout.fillWidth: true; spacing: 6
-        Chip { text: "Coming up"; on: !tv.past; onClicked: tv.past = false }
-        Chip { text: "Past"; on: tv.past; onClicked: tv.past = true }
+        Chip { text: Fq.t("Coming up"); on: !tv.past; onClicked: tv.past = false }
+        Chip { text: Fq.t("Past"); on: tv.past; onClicked: tv.past = true }
     }
     Flickable {
         id: fl
@@ -32,7 +32,7 @@ ColumnLayout {
         ColumnLayout {
             id: col
             width: fl.width - 12; spacing: 8
-            FText { visible: tv.groups.length === 0; text: tv.past ? "No past events in the last year." : "Nothing coming up yet."; color: Fq.sub; font.pixelSize: 14 }
+            FText { visible: tv.groups.length === 0; text: tv.past ? Fq.t("No past events in the last year.") : Fq.t("Nothing coming up yet."); color: Fq.sub; font.pixelSize: 14 }
             Repeater {
                 model: tv.groups
                 delegate: ColumnLayout {
@@ -41,9 +41,9 @@ ColumnLayout {
                     Layout.fillWidth: true; spacing: 8
                     RowLayout {
                         Layout.fillWidth: true; Layout.topMargin: 8; spacing: 12
-                        DText { text: Qt.formatDate(new Date(grp.modelData.first), "MMMM yyyy").toUpperCase(); color: Fq.lime; font.pixelSize: 34 }
+                        DText { text: Fq.fmtDate(new Date(grp.modelData.first), "MMMM yyyy").toUpperCase(); color: Fq.lime; font.pixelSize: 34 }
                         Rectangle { Layout.fillWidth: true; height: 1; color: Fq.line }
-                        FText { text: grp.modelData.occs.length + (grp.modelData.occs.length === 1 ? " event" : " events"); color: Fq.faint; font.pixelSize: 12 }
+                        FText { text: grp.modelData.occs.length + (grp.modelData.occs.length === 1 ? Fq.t(" event") : Fq.t(" events")); color: Fq.faint; font.pixelSize: 12 }
                     }
                     Repeater {
                         model: grp.modelData.occs
@@ -64,8 +64,8 @@ ColumnLayout {
                                 x: 20; y: 12; width: parent.width - 34; spacing: 18
                                 ColumnLayout {
                                     Layout.preferredWidth: 104; Layout.alignment: Qt.AlignTop; spacing: -6
-                                    DText { text: Qt.formatDate(new Date(row.modelData.startTime), "dd.MM"); font.pixelSize: 50 }
-                                    FText { text: Qt.formatDate(new Date(row.modelData.startTime), "dddd").toUpperCase(); color: Fq.sub; font.pixelSize: 12; font.letterSpacing: 1.2 }
+                                    DText { text: Fq.fmtDate(new Date(row.modelData.startTime), "dd.MM"); font.pixelSize: 50 }
+                                    FText { text: Fq.fmtDate(new Date(row.modelData.startTime), "dddd").toUpperCase(); color: Fq.sub; font.pixelSize: 12; font.letterSpacing: 1.2 }
                                 }
                                 Rectangle {
                                     visible: row.poster !== ""; Layout.preferredWidth: 70; Layout.preferredHeight: 88; Layout.alignment: Qt.AlignTop
@@ -76,12 +76,12 @@ ColumnLayout {
                                     Layout.fillWidth: true; Layout.alignment: Qt.AlignTop; spacing: 4
                                     RowLayout {
                                         Layout.fillWidth: true; spacing: 8
-                                        DText { Layout.fillWidth: true; elide: Text.ElideRight; font.pixelSize: 26; text: (row.modelData.title || "(untitled)").toUpperCase()
+                                        DText { Layout.fillWidth: true; elide: Text.ElideRight; font.pixelSize: 26; text: (row.modelData.title || Fq.t("(untitled)")).toUpperCase()
                                                 font.strikeout: Nights.fieldOf(row.m, "status") === "Cancelled" }
-                                        Badge { visible: Nights.fieldOf(row.m, "status") !== ""; text: Nights.fieldOf(row.m, "status"); tone: tv.app.evColor(row.modelData) }
+                                        Badge { visible: Nights.fieldOf(row.m, "status") !== ""; text: Fq.t(Nights.fieldOf(row.m, "status")); tone: tv.app.evColor(row.modelData) }
                                     }
                                     FText { Layout.fillWidth: true; elide: Text.ElideRight; color: Fq.sub; font.pixelSize: 13
-                                        text: [row.modelData.allDay ? "all day" : Qt.formatTime(new Date(row.modelData.startTime), "hh:mm") + "–" + Qt.formatTime(new Date(row.modelData.endTime), "hh:mm"),
+                                        text: [row.modelData.allDay ? Fq.t("all day") : Fq.fmtTime(new Date(row.modelData.startTime), "hh:mm") + "–" + Fq.fmtTime(new Date(row.modelData.endTime), "hh:mm"),
                                                Nights.fieldOf(row.m, "venue"), Nights.fieldOf(row.m, "type"), tv.app.calName(row.m.calendarId)].filter(function (x) { return !!x }).join("  ·  ") }
                                     FText { Layout.fillWidth: true; wrapMode: Text.Wrap; font.pixelSize: 13; visible: text !== ""
                                         text: { var lu = Lineup.lineupOf(row.m).filter(function (b) { return b.status !== "cancelled" }); return lu.length ? "(( " + lu.map(function (b) { return b.name }).join("  ·  ") + " ))" : "" } }
@@ -92,8 +92,8 @@ ColumnLayout {
                                         Rectangle { visible: Tickets.soldShare(row.t) > 0; Layout.preferredWidth: 120; height: 6; color: Fq.surface2
                                             Rectangle { height: parent.height; width: parent.width * Tickets.soldShare(row.t); color: Fq.lime } }
                                         FText { visible: !!row.t; text: Tickets.line(row.t); color: Fq.sub; font.pixelSize: 12 }
-                                        FText { visible: row.open > 0; text: row.open + " open task" + (row.open === 1 ? "" : "s"); color: Fq.sub; font.pixelSize: 12 }
-                                        FText { visible: row.clash; text: "⚠ clash"; color: Fq.warn; font.pixelSize: 12 }
+                                        FText { visible: row.open > 0; text: row.open + Fq.t(" open task") + (row.open === 1 ? "" : "s"); color: Fq.sub; font.pixelSize: 12 }
+                                        FText { visible: row.clash; text: Fq.t("⚠ clash"); color: Fq.warn; font.pixelSize: 12 }
                                         Item { Layout.fillWidth: true }
                                     }
                                 }

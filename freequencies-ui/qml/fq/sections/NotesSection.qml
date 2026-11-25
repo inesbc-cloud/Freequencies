@@ -11,7 +11,7 @@ ColumnLayout {
     property bool canEdit: false
     readonly property string saved: night ? (night.description || "") : ""
     Layout.fillWidth: true; spacing: 6
-    Sec { label: "Notes"; action: area.text !== ns.saved && ns.canEdit ? "save" : ""
+    Sec { label: Fq.t("Notes"); action: area.text !== ns.saved && ns.canEdit ? Fq.t("save") : ""
           onAct: ns.app.editNight(ns.night, function (up) { up.description = area.text }, "Notes saved") }
     Rectangle {
         Layout.fillWidth: true; Layout.preferredHeight: Math.max(80, area.implicitHeight + 4)
@@ -21,7 +21,7 @@ ColumnLayout {
             anchors.fill: parent; wrapMode: TextEdit.Wrap; readOnly: !ns.canEdit
             text: ns.saved
             color: Fq.text; font.family: Fq.body; font.pixelSize: 13
-            placeholderText: "Private notes for the team: load-in, contacts, what to remember…"
+            placeholderText: Fq.t("Private notes for the team: load-in, contacts, what to remember…")
             placeholderTextColor: Fq.faint; selectionColor: Fq.lime; selectedTextColor: Fq.ink
             background: Item {}
         }

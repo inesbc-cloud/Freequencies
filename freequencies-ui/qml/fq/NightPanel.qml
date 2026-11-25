@@ -38,23 +38,23 @@ Rectangle {
                     x: 16; y: 15; width: parent.width - 32; spacing: 2
                     RowLayout {
                         Layout.fillWidth: true
-                        FText { text: panel.occ ? (panel.occ.endTime < Date.now() ? "( past gathering )" : "( next gathering )") : ""; color: Fq.ink; font.pixelSize: 12; font.bold: true; font.letterSpacing: 1.2 }
+                        FText { text: panel.occ ? (panel.occ.endTime < Date.now() ? Fq.t("( past gathering )") : Fq.t("( next gathering )")) : ""; color: Fq.ink; font.pixelSize: 12; font.bold: true; font.letterSpacing: 1.2 }
                         Item { Layout.fillWidth: true }
                         FText { text: "✕"; color: Fq.ink; font.pixelSize: 16
                             MouseArea { anchors.fill: parent; anchors.margins: -8; cursorShape: Qt.PointingHandCursor; onClicked: panel.app.selectedNight = null } }
                     }
-                    DText { text: panel.occ ? Qt.formatDate(new Date(panel.occ.startTime), "dd.MM") : ""; color: Fq.ink; font.pixelSize: 72; Layout.topMargin: -4 }
-                    DText { text: panel.night ? (panel.night.title || "(untitled)").toUpperCase() : ""; color: Fq.ink; font.pixelSize: 32; wrapMode: Text.Wrap; Layout.fillWidth: true; Layout.topMargin: -10 }
+                    DText { text: panel.occ ? Fq.fmtDate(new Date(panel.occ.startTime), "dd.MM") : ""; color: Fq.ink; font.pixelSize: 72; Layout.topMargin: -4 }
+                    DText { text: panel.night ? (panel.night.title || Fq.t("(untitled)")).toUpperCase() : ""; color: Fq.ink; font.pixelSize: 32; wrapMode: Text.Wrap; Layout.fillWidth: true; Layout.topMargin: -10 }
                     FText {
                         Layout.fillWidth: true; wrapMode: Text.Wrap; color: Fq.ink; font.pixelSize: 13
-                        text: panel.occ ? Qt.formatDate(new Date(panel.occ.startTime), "dddd") + "  ·  "
-                              + (panel.occ.allDay ? "all day" : Qt.formatTime(new Date(panel.occ.startTime), "hh'h'mm") + " às " + Qt.formatTime(new Date(panel.occ.endTime), "hh'h'mm"))
+                        text: panel.occ ? Fq.fmtDate(new Date(panel.occ.startTime), "dddd") + "  ·  "
+                              + (panel.occ.allDay ? "all day" : Fq.fmtTime(new Date(panel.occ.startTime), "hh'h'mm") + " às " + Fq.fmtTime(new Date(panel.occ.endTime), "hh'h'mm"))
                               + (Nights.fieldOf(panel.night, "venue") ? "  ·  " + Nights.fieldOf(panel.night, "venue") : "") : ""
                     }
                     Flow {
                         Layout.fillWidth: true; Layout.topMargin: 6; spacing: 6
-                        Badge { text: Nights.fieldOf(panel.night, "status") || "no status"; tone: Fq.ink }
-                        Badge { visible: Nights.fieldOf(panel.night, "type") !== ""; text: Nights.fieldOf(panel.night, "type"); tone: Fq.ink }
+                        Badge { text: Fq.t(Nights.fieldOf(panel.night, "status")) || Fq.t("no status"); tone: Fq.ink }
+                        Badge { visible: Nights.fieldOf(panel.night, "type") !== ""; text: Fq.t(Nights.fieldOf(panel.night, "type")); tone: Fq.ink }
                         Badge { visible: !!panel.cal; text: panel.cal ? (panel.cal.name || "") : ""; tone: Fq.ink }
                         Badge { visible: !!panel.night && !!panel.night.recur && !!panel.night.recur.freq; text: "↻ " + (panel.night ? panel.app.recurLabel(panel.night.recur) : ""); tone: Fq.ink }
                     }
@@ -75,17 +75,17 @@ Rectangle {
 
                 RowLayout {
                     Layout.fillWidth: true; Layout.topMargin: 8; spacing: 8
-                    FqButton { text: "Edit details"; onClicked: panel.app.openEditEvent(panel.occ) }
-                    FqButton { text: panel.app.dupBusy ? "Copying…" : "Duplicate"; enabled: panel.canEdit && !panel.app.dupBusy; onClicked: panel.app.duplicateNight(panel.night) }
+                    FqButton { text: Fq.t("Edit details"); onClicked: panel.app.openEditEvent(panel.occ) }
+                    FqButton { text: panel.app.dupBusy ? Fq.t("Copying…") : Fq.t("Duplicate"); enabled: panel.canEdit && !panel.app.dupBusy; onClicked: panel.app.duplicateNight(panel.night) }
                     Item { Layout.fillWidth: true }
                 }
                 FText { visible: !!panel.night && !panel.canEdit; Layout.fillWidth: true; Layout.topMargin: 8; wrapMode: Text.Wrap; color: Fq.warn; font.pixelSize: 12
-                    text: "Read-only: you're a " + Nights.roleOf(panel.cal) + " on this calendar." }
+                    text: Fq.t("Read-only: you're a ") + Nights.roleOf(panel.cal) + Fq.t(" on this calendar.") }
 
                 Repeater {   // clash warnings (#25)
                     model: panel.occ ? panel.app.nightClashesOf(panel.occ) : []
                     delegate: FText { required property var modelData; Layout.fillWidth: true; Layout.topMargin: 6; wrapMode: Text.Wrap; color: Fq.warn; font.pixelSize: 12
-                        text: Clashes.line(modelData, Qt.formatDateTime(new Date(modelData.other.startTime), "d MMM hh:mm")) }
+                        text: Clashes.line(modelData, Fq.fmtDateTime(new Date(modelData.other.startTime), "d MMM hh:mm")) }
                 }
                 QuickFields { app: panel.app; night: panel.night; canEdit: panel.canEdit }
                 DetailsSection { app: panel.app; night: panel.night; canEdit: panel.canEdit }
@@ -99,17 +99,17 @@ Rectangle {
                 CrewSection { app: panel.app; night: panel.night; canEdit: panel.canEdit; onEditCrew: function (c) { crewPopup.openFor(c) } }
                 ChecklistSection {
                     app: panel.app; night: panel.night; canEdit: panel.canEdit
-                    kind: "task"; label: "Tasks (" + Checklist.openCount(panel.night) + " open)"; addLabel: "+ task"
+                    kind: "task"; label: Fq.t("Tasks (") + Checklist.openCount(panel.night) + Fq.t(" open)"); addLabel: Fq.t("+ task")
                     items: Checklist.tasksOf(panel.night)
-                    emptyText: "Book artists, announce, print posters, pay the deposit… Deadlines turn amber three days before and red when overdue."
-                    meta: function (it) { return [Checklist.overdue(it, Date.now()) ? "OVERDUE" : "", it.d.due ? "due " + Qt.formatDateTime(new Date(it.d.due), "ddd d MMM hh:mm") : "", it.d.cat || ""].filter(function (x) { return !!x }).join(" · ") }
+                    emptyText: Fq.t("Book artists, announce, print posters, pay the deposit… Deadlines turn amber three days before and red when overdue.")
+                    meta: function (it) { return [Checklist.overdue(it, Date.now()) ? "OVERDUE" : "", it.d.due ? "due " + Fq.fmtDateTime(new Date(it.d.due), "ddd d MMM hh:mm") : "", it.d.cat || ""].filter(function (x) { return !!x }).join(" · ") }
                     tone: function (it) { return Checklist.overdue(it, Date.now()) ? Fq.red : Checklist.dueSoon(it, Date.now()) ? Fq.warn : Fq.sub }
                     onEditItem: function (k, it) { itemPopup.openFor(k, it) }
                 }
                 ChecklistSection {
                     id: gear
                     app: panel.app; night: panel.night; canEdit: panel.canEdit
-                    kind: "gear"; label: "Gear (" + Checklist.packedCount(panel.night) + "/" + Checklist.gearOf(panel.night).length + " packed)"; addLabel: "+ item"
+                    kind: "gear"; label: Fq.t("Gear (") + Checklist.packedCount(panel.night) + "/" + Checklist.gearOf(panel.night).length + Fq.t(" packed)"); addLabel: Fq.t("+ item")
                     items: Checklist.gearOf(panel.night)
                     onEditItem: function (k, it) { itemPopup.openFor(k, it) }
                     Flow {
@@ -121,10 +121,10 @@ Rectangle {
                 }
                 ChecklistSection {
                     app: panel.app; night: panel.night; canEdit: panel.canEdit
-                    kind: "post"; label: "Social posts"; addLabel: "+ post"
+                    kind: "post"; label: Fq.t("Social posts"); addLabel: Fq.t("+ post")
                     items: Checklist.postsOf(panel.night)
-                    emptyText: "Plan what goes out and when: announcement, line-up reveal, day-of stories, recap."
-                    meta: function (it) { return [it.d.channel || "", it.d.when ? Qt.formatDateTime(new Date(it.d.when), "ddd d MMM hh:mm") : "unscheduled"].join(" · ") }
+                    emptyText: Fq.t("Plan what goes out and when: announcement, line-up reveal, day-of stories, recap.")
+                    meta: function (it) { return [it.d.channel || "", it.d.when ? Fq.fmtDateTime(new Date(it.d.when), "ddd d MMM hh:mm") : "unscheduled"].join(" · ") }
                     tone: function (it) { return Checklist.postDueSoon(it, Date.now()) ? Fq.warn : Fq.sub }
                     onEditItem: function (k, it) { itemPopup.openFor(k, it) }
                 }
@@ -151,5 +151,5 @@ Rectangle {
     ResponsesPopup { id: responsesPopup; app: panel.app }
     property alias dlgPublic: publicPopup
     PublicPopup { id: publicPopup; app: panel.app; night: panel.night }
-    FileDialog { id: fileDialog; title: "Attach a file to this event"; onAccepted: panel.app.uploadToNight(panel.night, fileDialog.selectedFile) }
+    FileDialog { id: fileDialog; title: Fq.t("Attach a file to this event"); onAccepted: panel.app.uploadToNight(panel.night, fileDialog.selectedFile) }
 }

@@ -10,8 +10,8 @@ ColumnLayout {
     property var night
     property bool canEdit: false
     property string kind: "task"           // "task" | "gear" | "post"
-    property string label: "Tasks"
-    property string addLabel: "+ task"
+    property string label: Fq.t("Tasks")
+    property string addLabel: Fq.t("+ task")
     property string emptyText: ""
     property var items: []                 // [{id, author, d}] from fq/lib/checklist.js
     property var meta: function (it) { return "" }        // the grey line under an item
