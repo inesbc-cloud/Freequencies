@@ -33,7 +33,7 @@ Win {
     }
     function save() {
         var name = nameIn.text.trim(), role = roleIn.text.trim()
-        if (!name && !role) { app.notify("Give a role or a name. A role without a name is an open slot.", true); return }
+        if (!name && !role) { app.notify(Fq.t("Give a role or a name. A role without a name is an open slot."), true); return }
         var data = { name: name, role: role, status: status }
         if (name && contact) { data.contact = contact; data.book = book }
         if (callIn.text.trim()) data.call = callIn.text.trim()
@@ -41,31 +41,31 @@ Win {
                      function (ok) { if (ok) cp.close() })
     }
 
-    Label_ { text: "ROLE" }
-    Field { id: roleIn; Layout.fillWidth: true; placeholderText: "Door, Bar, Sound…" }
+    Label_ { text: Fq.t("ROLE") }
+    Field { id: roleIn; Layout.fillWidth: true; placeholderText: Fq.t("Door, Bar, Sound…") }
     Flow { Layout.fillWidth: true; spacing: 6
-        Repeater { model: Crew.roles; delegate: Chip { required property var modelData; text: modelData; on: roleIn.text === modelData; onClicked: roleIn.text = modelData } } }
-    Label_ { text: "PERSON (EMPTY = OPEN SLOT)" }
-    Field { id: search; Layout.fillWidth: true; placeholderText: "Search your Kith books…"; onTextChanged: cp.query = text }
+        Repeater { model: Crew.roles; delegate: Chip { required property var modelData; text: Fq.t(modelData); on: roleIn.text === modelData; onClicked: roleIn.text = modelData } } }
+    Label_ { text: Fq.t("PERSON (EMPTY = OPEN SLOT)") }
+    Field { id: search; Layout.fillWidth: true; placeholderText: Fq.t("Search your Kith books…"); onTextChanged: cp.query = text }
     Flow { Layout.fillWidth: true; spacing: 6
         Repeater { model: cp.matches
             delegate: Chip { required property var modelData; text: modelData.name; on: cp.contact === modelData.id
                 onClicked: { cp.contact = modelData.id; cp.book = modelData.bookId; nameIn.text = modelData.name } } } }
-    Field { id: nameIn; Layout.fillWidth: true; placeholderText: "Name"; onTextEdited: cp.contact = "" }
+    Field { id: nameIn; Layout.fillWidth: true; placeholderText: Fq.t("Name"); onTextEdited: cp.contact = "" }
     RowLayout {
         Layout.fillWidth: true; spacing: 8
-        ColumnLayout { spacing: 4; Label_ { text: "CALL" } Field { id: callIn; Layout.preferredWidth: 90; placeholderText: "16:30" } }
-        ColumnLayout { Layout.fillWidth: true; spacing: 4; Label_ { text: "STATUS" }
+        ColumnLayout { spacing: 4; Label_ { text: Fq.t("CALL") } Field { id: callIn; Layout.preferredWidth: 90; placeholderText: "16:30" } }
+        ColumnLayout { Layout.fillWidth: true; spacing: 4; Label_ { text: Fq.t("STATUS") }
             Flow { Layout.fillWidth: true; spacing: 6
                 Repeater { model: Lineup.bookingStatuses
-                    delegate: Chip { required property var modelData; text: Lineup.cap(modelData); accent: cp.app ? cp.app.bookingColor(modelData) : Fq.lime
+                    delegate: Chip { required property var modelData; text: Fq.t(Lineup.cap(modelData)); accent: cp.app ? cp.app.bookingColor(modelData) : Fq.lime
                         on: cp.status === modelData; onClicked: cp.status = modelData } } } }
     }
     RowLayout {
         Layout.fillWidth: true; Layout.topMargin: 8; spacing: 8
-        FqButton { visible: cp.canRemove; text: "Remove"; onClicked: cp.app.deleteItem(cp.night, cp.id_, "Removed from the crew", function (ok) { if (ok) cp.close() }) }
+        FqButton { visible: cp.canRemove; text: Fq.t("Remove"); onClicked: cp.app.deleteItem(cp.night, cp.id_, Fq.t("Removed from the crew"), function (ok) { if (ok) cp.close() }) }
         Item { Layout.fillWidth: true }
-        FqButton { text: "Cancel"; onClicked: cp.close() }
-        FqButton { text: cp.id_ ? "Save" : "Add"; primary: true; enabled: !cp.app || !cp.app.extBusy; onClicked: cp.save() }
+        FqButton { text: Fq.t("Cancel"); onClicked: cp.close() }
+        FqButton { text: cp.id_ ? Fq.t("Save") : "Add"; primary: true; enabled: !cp.app || !cp.app.extBusy; onClicked: cp.save() }
     }
 }

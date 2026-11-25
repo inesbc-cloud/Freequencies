@@ -5,7 +5,7 @@ import QtQuick.Layouts
 RowLayout {
     id: sec
     property string label: ""
-    property string action: ""             // e.g. "+ artist"; empty = none
+    property string action: ""             // e.g. Fq.t("+ artist"); empty = none
     signal act()
     Layout.fillWidth: true; Layout.topMargin: 16; spacing: 8
     FText { text: ">_ " + sec.label.toUpperCase(); color: Fq.lime; font.pixelSize: 12; font.letterSpacing: 1.2 }

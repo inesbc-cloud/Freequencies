@@ -25,7 +25,7 @@ Win {
                     for (var m = 0; m < qs.length; m++) if (qs[m] && qs[m].id === a.questionId) { qq = qs[m]; break }
                     lines.push((qq ? String(qq.text) : String(a.questionId)) + ": " + Forms.answerText(qq, a.value))
                 }
-                out.push({ head: typeof rr.submittedAt === "number" ? Qt.formatDateTime(new Date(rr.submittedAt), "d MMM hh:mm") : "Answer " + (i + 1), lines: lines })
+                out.push({ head: typeof rr.submittedAt === "number" ? Fq.fmtDateTime(new Date(rr.submittedAt), "d MMM hh:mm") : "Answer " + (i + 1), lines: lines })
             }
             rp.rows = out.length ? out : [{ head: "No answers yet", lines: [] }]
         })
@@ -41,5 +41,5 @@ Win {
                     Repeater { model: modelData.lines; delegate: FText { required property var modelData; Layout.fillWidth: true; wrapMode: Text.Wrap; text: modelData; font.pixelSize: 13 } } } }
         }
     }
-    FqButton { Layout.alignment: Qt.AlignRight; text: "Close"; onClicked: rp.close() }
+    FqButton { Layout.alignment: Qt.AlignRight; text: Fq.t("Close"); onClicked: rp.close() }
 }

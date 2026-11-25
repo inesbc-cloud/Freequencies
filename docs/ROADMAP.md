@@ -81,6 +81,7 @@ not yet on real Basecamp (issue #29); none counts as done until Android reads it
 | Production: plan per night by format (8 promoter formats, T-minus timeline, team, venue & ops, hospitality, suppliers, run of show, risks, debrief, custom modules; the night's line-up/crew/budget/tickets/posts/gear as modules), after Louisa Prog's INTERSECT production office; ext kinds `prod-plan` / `prod-row` | — | 🧪 |
 | Promo studio: posts and stories from a night's data (announce, line-up, artist cards in a batch, timetable, countdown, tickets, thank you), Feed 4:5 / square / story, EN/PT, your own logo, photos stay on the computer, PNG export; "plan the campaign" dates every post in the social planner | — | 🧪 |
 | Lisboa: a shared community calendar for every collective's public events; public listings (pink, read-only) from Luma's official Lisbon feed, fetched every hour by each install through the new `freequencies_core` module (views have no network); RA and Shotgun asked for feeds | — | 🧪 |
+| English / Portuguese (Portugal) switch, top right: every screen, dates, Home messages and new Production plans; one table (`fq/lib/i18n.js`, ~950 entries) | — | 🧪 |
 | Funding library: winning applications with documents, links to funders and open calls; its own "Funding library" calendar (marker field `fq_funding`, one anchor event), ext kinds `fund-app` / `fund-link` | — | 🧪 |
 | Android readers for the new kinds | #28 | ⬜ |
 | Test pass on real Basecamp | #29 | ⬜ |

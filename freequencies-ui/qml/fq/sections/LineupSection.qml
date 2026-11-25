@@ -13,8 +13,8 @@ ColumnLayout {
     readonly property var lineup: Lineup.lineupOf(night)
     Layout.fillWidth: true; spacing: 6
 
-    Sec { label: "Line-up (" + ls.lineup.length + ")"; action: "+ artist"; onAct: ls.editArtist(null) }
-    FText { visible: ls.lineup.length === 0; text: "No artists yet."; color: Fq.sub; font.pixelSize: 12 }
+    Sec { label: Fq.t("Line-up (") + ls.lineup.length + ")"; action: Fq.t("+ artist"); onAct: ls.editArtist(null) }
+    FText { visible: ls.lineup.length === 0; text: Fq.t("No artists yet."); color: Fq.sub; font.pixelSize: 12 }
     Repeater {
         model: ls.lineup
         delegate: Rectangle {
@@ -36,9 +36,9 @@ ColumnLayout {
                     FText { visible: bk.index % 2 === 1; text: "))"; color: Fq.bracket; font.pixelSize: 13; font.bold: true; anchors.verticalCenter: parent.verticalCenter }
                 }
                 FText { width: parent.width; elide: Text.ElideRight; color: Fq.sub; font.pixelSize: 12
-                    text: [bk.modelData.set, Lineup.cap(bk.modelData.status), Lineup.feeLabel(bk.modelData), bk.modelData.contact ? "" : "not in Kith"].filter(function (x) { return !!x }).join(" · ") }
+                    text: [bk.modelData.set, Fq.t(Lineup.cap(bk.modelData.status)), Lineup.feeLabel(bk.modelData), bk.modelData.contact ? "" : Fq.t("not in Kith")].filter(function (x) { return !!x }).join(" · ") }
             }
         }
     }
-    FText { visible: Lineup.feesTotal(ls.lineup) !== ""; text: "Fees: " + Lineup.feesTotal(ls.lineup); color: Fq.sub; font.pixelSize: 12 }
+    FText { visible: Lineup.feesTotal(ls.lineup) !== ""; text: Fq.t("Fees: ") + Lineup.feesTotal(ls.lineup); color: Fq.sub; font.pixelSize: 12 }
 }

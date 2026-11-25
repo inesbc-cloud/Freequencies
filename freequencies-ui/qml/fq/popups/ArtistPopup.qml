@@ -37,15 +37,15 @@ Win {
     }
     function save() {
         var name = nameIn.text.trim()
-        if (!name) { app.notify("Pick an artist or type a name.", true); return }
+        if (!name) { app.notify(Fq.t("Pick an artist or type a name."), true); return }
         var feeT = feeIn.text.trim().replace(",", "."), fee = feeT === "" ? null : Number(feeT)
-        if (fee !== null && !(isFinite(fee) && fee >= 0)) { app.notify("The fee should be a number, for example 250 or 99.50.", true); return }
+        if (fee !== null && !(isFinite(fee) && fee >= 0)) { app.notify(Fq.t("The fee should be a number, for example 250 or 99.50."), true); return }
         var data = Lineup.bookingData(name, status, contact, book, fee, curIn.text.trim().toUpperCase(), setIn.text.trim())
         app.postItem(night, Ext.item("artist", night.id, data, id_), id_ ? "Booking updated" : "Added " + name, function (ok) { if (ok) ap.close() })
     }
 
-    Label_ { text: "FROM KITH" }
-    Field { id: search; Layout.fillWidth: true; placeholderText: ap.app && ap.app.kithState === "missing" ? "Kith isn't installed: type the name below" : "Search your Kith books…"
+    Label_ { text: Fq.t("FROM KITH") }
+    Field { id: search; Layout.fillWidth: true; placeholderText: ap.app && ap.app.kithState === "missing" ? Fq.t("Kith isn't installed: type the name below") : Fq.t("Search your Kith books…")
             onTextChanged: ap.query = text }
     Flow {
         Layout.fillWidth: true; spacing: 6
@@ -53,25 +53,25 @@ Win {
             delegate: Chip { required property var modelData; text: modelData.name; on: ap.contact === modelData.id
                 onClicked: { ap.contact = modelData.id; ap.book = modelData.bookId; nameIn.text = modelData.name } } }
     }
-    FText { visible: !!ap.app && ap.app.kithState === "none"; text: "No Kith books yet."; color: Fq.faint; font.pixelSize: 12 }
-    Label_ { text: "NAME" }
-    Field { id: nameIn; Layout.fillWidth: true; placeholderText: "Artist or act"; onTextEdited: ap.contact = "" }
-    Label_ { text: "STATUS" }
+    FText { visible: !!ap.app && ap.app.kithState === "none"; text: Fq.t("No Kith books yet."); color: Fq.faint; font.pixelSize: 12 }
+    Label_ { text: Fq.t("NAME") }
+    Field { id: nameIn; Layout.fillWidth: true; placeholderText: Fq.t("Artist or act"); onTextEdited: ap.contact = "" }
+    Label_ { text: Fq.t("STATUS") }
     Flow { Layout.fillWidth: true; spacing: 6
         Repeater { model: Lineup.bookingStatuses
-            delegate: Chip { required property var modelData; text: Lineup.cap(modelData); accent: ap.app ? ap.app.bookingColor(modelData) : Fq.lime
+            delegate: Chip { required property var modelData; text: Fq.t(Lineup.cap(modelData)); accent: ap.app ? ap.app.bookingColor(modelData) : Fq.lime
                 on: ap.status === modelData; onClicked: ap.status = modelData } } }
     RowLayout {
         Layout.fillWidth: true; spacing: 8
-        ColumnLayout { spacing: 4; Label_ { text: "SET" } Field { id: setIn; Layout.preferredWidth: 90; placeholderText: "23:00" } }
-        ColumnLayout { Layout.fillWidth: true; spacing: 4; Label_ { text: "FEE" } Field { id: feeIn; Layout.fillWidth: true; placeholderText: "250" } }
-        ColumnLayout { spacing: 4; Label_ { text: "CURRENCY" } Field { id: curIn; Layout.preferredWidth: 80 } }
+        ColumnLayout { spacing: 4; Label_ { text: Fq.t("SET") } Field { id: setIn; Layout.preferredWidth: 90; placeholderText: "23:00" } }
+        ColumnLayout { Layout.fillWidth: true; spacing: 4; Label_ { text: Fq.t("FEE") } Field { id: feeIn; Layout.fillWidth: true; placeholderText: "250" } }
+        ColumnLayout { spacing: 4; Label_ { text: Fq.t("CURRENCY") } Field { id: curIn; Layout.preferredWidth: 80 } }
     }
     RowLayout {
         Layout.fillWidth: true; Layout.topMargin: 8; spacing: 8
-        FqButton { visible: ap.canRemove; text: "Remove"; onClicked: ap.app.deleteItem(ap.night, ap.id_, "Removed from the line-up", function (ok) { if (ok) ap.close() }) }
+        FqButton { visible: ap.canRemove; text: Fq.t("Remove"); onClicked: ap.app.deleteItem(ap.night, ap.id_, Fq.t("Removed from the line-up"), function (ok) { if (ok) ap.close() }) }
         Item { Layout.fillWidth: true }
-        FqButton { text: "Cancel"; onClicked: ap.close() }
-        FqButton { text: ap.id_ ? "Save" : "Add"; primary: true; enabled: !ap.app || !ap.app.extBusy; onClicked: ap.save() }
+        FqButton { text: Fq.t("Cancel"); onClicked: ap.close() }
+        FqButton { text: ap.id_ ? Fq.t("Save") : "Add"; primary: true; enabled: !ap.app || !ap.app.extBusy; onClicked: ap.save() }
     }
 }

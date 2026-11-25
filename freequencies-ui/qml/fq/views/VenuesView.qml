@@ -17,8 +17,8 @@ Flickable {
         id: col
         width: vv.width - 12; spacing: 12
         FText { Layout.fillWidth: true; wrapMode: Text.Wrap; color: Fq.sub; font.pixelSize: 13
-            text: "Every venue your events have used, saved once and reused: an event's venue is one click in its panel." }
-        FText { visible: vv.list.length === 0; text: "No venues yet. Give an event a venue and it shows up here."; color: Fq.sub; font.pixelSize: 14 }
+            text: Fq.t("Every venue your events have used, saved once and reused: an event's venue is one click in its panel.") }
+        FText { visible: vv.list.length === 0; text: Fq.t("No venues yet. Give an event a venue and it shows up here."); color: Fq.sub; font.pixelSize: 14 }
         GridLayout {
             Layout.fillWidth: true; columns: Math.max(1, Math.floor(col.width / 290)); columnSpacing: -1; rowSpacing: -1
             Repeater {
@@ -32,15 +32,15 @@ Flickable {
                         id: tc
                         x: 16; y: 16; width: parent.width - 32; spacing: 4
                         DText { Layout.fillWidth: true; elide: Text.ElideRight; font.pixelSize: 32; text: tile.modelData.name.toUpperCase() }
-                        FText { color: Fq.sub; font.pixelSize: 13; text: tile.modelData.nights + " event" + (tile.modelData.nights === 1 ? "" : "s") + " · " + tile.modelData.upcoming + " coming up" }
+                        FText { color: Fq.sub; font.pixelSize: 13; text: tile.modelData.nights + Fq.t(" event") + (tile.modelData.nights === 1 ? "" : "s") + " · " + tile.modelData.upcoming + Fq.t(" coming up") }
                         FText { color: Fq.sub; font.pixelSize: 13; visible: text !== ""
-                            text: tile.modelData.next ? "Next: " + Qt.formatDate(new Date(tile.modelData.next), "ddd d MMM") : tile.modelData.last ? "Last: " + Qt.formatDate(new Date(tile.modelData.last), "d MMM yyyy") : "" }
-                        FText { color: Fq.sub; font.pixelSize: 13; visible: tile.modelData.attendance > 0; text: tile.modelData.attendance + " people through the door" }
+                            text: tile.modelData.next ? Fq.t("Next: ") + Fq.fmtDate(new Date(tile.modelData.next), "ddd d MMM") : tile.modelData.last ? Fq.t("Last: ") + Fq.fmtDate(new Date(tile.modelData.last), "d MMM yyyy") : "" }
+                        FText { color: Fq.sub; font.pixelSize: 13; visible: tile.modelData.attendance > 0; text: tile.modelData.attendance + Fq.t(" people through the door") }
                         FText { color: Fq.faint; font.pixelSize: 12; Layout.fillWidth: true; elide: Text.ElideRight; text: tile.modelData.cals.join(" · ") }
                         Flow {
                             Layout.fillWidth: true; Layout.topMargin: 6; spacing: 14
-                            Link { text: "show events"; onClicked: { vv.app.nightFilter = Filters.with_(Filters.empty(), "venue", tile.modelData.name); vv.app.calMode = "timeline" } }
-                            Link { text: "map ↗"; onClicked: Qt.openUrlExternally("https://www.openstreetmap.org/search?query=" + encodeURIComponent(tile.modelData.name + ", Lisboa")) }
+                            Link { text: Fq.t("show events"); onClicked: { vv.app.nightFilter = Filters.with_(Filters.empty(), "venue", tile.modelData.name); vv.app.calMode = "timeline" } }
+                            Link { text: Fq.t("map ↗"); onClicked: Qt.openUrlExternally("https://www.openstreetmap.org/search?query=" + encodeURIComponent(tile.modelData.name + Fq.t(", Lisboa"))) }
                         }
                     }
                 }

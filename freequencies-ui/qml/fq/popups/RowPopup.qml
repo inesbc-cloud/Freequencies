@@ -46,7 +46,7 @@ Win {
                     id: fd
                     required property var modelData
                     Layout.fillWidth: true; spacing: 4
-                    Label_ { text: (fd.modelData.type === "tminus" ? "DAYS BEFORE THE SHOW (−2 = TWO DAYS AFTER)" : fd.modelData.l.toUpperCase()) }
+                    Label_ { text: (fd.modelData.type === "tminus" ? Fq.t("DAYS BEFORE THE SHOW (−2 = TWO DAYS AFTER)") : Fq.t(fd.modelData.l).toUpperCase()) }
                     Field {
                         visible: ["select", "check"].indexOf(fd.modelData.type) < 0; Layout.fillWidth: true
                         text: rp.vals[fd.modelData.k] === undefined ? "" : String(rp.vals[fd.modelData.k])
@@ -57,9 +57,9 @@ Win {
                     Flow {
                         visible: fd.modelData.type === "select"; Layout.fillWidth: true; spacing: 6
                         Repeater { model: fd.modelData.opts || []
-                            delegate: Chip { required property var modelData; text: modelData; on: rp.vals[fd.modelData.k] === modelData; onClicked: rp.setVal(fd.modelData.k, modelData) } }
+                            delegate: Chip { required property var modelData; text: Fq.t(modelData); on: rp.vals[fd.modelData.k] === modelData; onClicked: rp.setVal(fd.modelData.k, modelData) } }
                     }
-                    Chip { visible: fd.modelData.type === "check"; text: rp.vals[fd.modelData.k] === true ? "Yes" : "No"; on: rp.vals[fd.modelData.k] === true
+                    Chip { visible: fd.modelData.type === "check"; text: rp.vals[fd.modelData.k] === true ? Fq.t("Yes") : Fq.t("No"); on: rp.vals[fd.modelData.k] === true
                         onClicked: rp.setVal(fd.modelData.k, !(rp.vals[fd.modelData.k] === true)) }
                 }
             }
@@ -67,9 +67,9 @@ Win {
     }
     RowLayout {
         Layout.fillWidth: true; Layout.topMargin: 8; spacing: 8
-        FqButton { visible: !!rp.row; text: "Remove"; onClicked: rp.app.deleteRow(rp.night, rp.row, function (ok) { if (ok) rp.close() }) }
+        FqButton { visible: !!rp.row; text: Fq.t("Remove"); onClicked: rp.app.deleteRow(rp.night, rp.row, function (ok) { if (ok) rp.close() }) }
         Item { Layout.fillWidth: true }
-        FqButton { text: "Cancel"; onClicked: rp.close() }
-        FqButton { text: rp.row ? "Save" : "Add"; primary: true; enabled: !(rp.app && rp.app.extBusy); onClicked: rp.save() }
+        FqButton { text: Fq.t("Cancel"); onClicked: rp.close() }
+        FqButton { text: rp.row ? Fq.t("Save") : "Add"; primary: true; enabled: !(rp.app && rp.app.extBusy); onClicked: rp.save() }
     }
 }

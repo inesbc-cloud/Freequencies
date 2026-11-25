@@ -106,14 +106,14 @@ function quickNight(f) {
 }
 
 function detailsOf(night) { return Ext.latestData(night, "details") || {} }
-function priceLabel(d) {
+function priceLabel(d, tr) {
     if (!d) return ""
-    if (d.free === true) return "Free"
+    if (d.free === true) return tr ? tr("Free") : "Free"
     if (typeof d.price === "number") return d.price + (d.currency ? " " + d.currency : "")
     return ""
 }
 // One line for cards and the panel: "150–300 · 8 EUR · 18+".
-function summary(d) {
+function summary(d, tr) {
     if (!d) return ""
-    return [d.audience ? d.audience + " expected" : "", priceLabel(d), d.age || ""].filter(function (x) { return !!x }).join(" · ")
+    return [d.audience ? (tr ? tr("%1 expected", [d.audience]) : d.audience + " expected") : "", priceLabel(d, tr), d.age ? (tr ? tr(d.age) : d.age) : ""].filter(function (x) { return !!x }).join(" · ")
 }

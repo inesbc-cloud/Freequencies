@@ -13,9 +13,9 @@ ColumnLayout {
     readonly property var t: Tickets.ticketsOf(night)
     Layout.fillWidth: true; spacing: 5
 
-    Sec { label: "Tickets"; action: tk.canEdit ? (tk.t ? "edit" : "+ add") : ""; onAct: tk.editTickets() }
+    Sec { label: Fq.t("Tickets"); action: tk.canEdit ? (tk.t ? Fq.t("edit") : Fq.t("+ add")) : ""; onAct: tk.editTickets() }
     FText { visible: !tk.t; Layout.fillWidth: true; wrapMode: Text.Wrap; color: Fq.sub; font.pixelSize: 12
-        text: "No ticket link yet. Paste one from Luma, 3cket, Shotgun… and keep the numbers here." }
+        text: Fq.t("No ticket link yet. Paste one from Luma, 3cket, Shotgun… and keep the numbers here.") }
     RowLayout {
         visible: !!tk.t; Layout.fillWidth: true; spacing: 10
         DText { text: tk.t && tk.t.sold !== undefined ? String(tk.t.sold) : "—"; font.pixelSize: 40; color: Fq.lime }
@@ -29,6 +29,6 @@ ColumnLayout {
             }
         }
     }
-    Link { visible: !!tk.t && !!tk.t.url; text: tk.t && tk.t.url ? "open ticket page ↗  " + String(tk.t.url).replace(/^https?:\/\//, "") : ""
+    Link { visible: !!tk.t && !!tk.t.url; text: tk.t && tk.t.url ? Fq.t("open ticket page ↗  ") + String(tk.t.url).replace(/^https?:\/\//, "") : ""
            onClicked: Qt.openUrlExternally(tk.t.url) }
 }

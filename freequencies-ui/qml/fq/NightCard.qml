@@ -22,8 +22,8 @@ Rectangle {
     Row {
         visible: nc.compact
         x: 8; width: parent.width - 12; anchors.verticalCenter: parent.verticalCenter; spacing: 5; clip: true
-        FText { text: nc.occ && !nc.occ.allDay ? Qt.formatTime(new Date(nc.occ.startTime), "hh:mm") : ""; color: Fq.sub; font.pixelSize: 12 }
-        FText { text: (nc.clash ? "⚠ " : "") + (nc.occ ? (nc.occ.title || "(untitled)") : ""); color: nc.clash ? Fq.warn : Fq.text; font.pixelSize: 12
+        FText { text: nc.occ && !nc.occ.allDay ? Fq.fmtTime(new Date(nc.occ.startTime), "hh:mm") : ""; color: Fq.sub; font.pixelSize: 12 }
+        FText { text: (nc.clash ? "⚠ " : "") + (nc.occ ? (nc.occ.title || Fq.t("(untitled)")) : ""); color: nc.clash ? Fq.warn : Fq.text; font.pixelSize: 12
                 font.strikeout: nc.status === "Cancelled" }
     }
     Image {   // poster thumbnail (#15) on full cards wide enough for it
@@ -38,9 +38,9 @@ Rectangle {
         visible: !nc.compact
         x: 10; width: parent.width - 14 - thumb.width; anchors.verticalCenter: parent.verticalCenter; spacing: 1
         FText { width: parent.width; elide: Text.ElideRight; wrapMode: Text.Wrap; maximumLineCount: 2; font.pixelSize: 13
-                text: nc.occ ? (nc.occ.title || "(untitled)") : ""; font.strikeout: nc.status === "Cancelled" }
+                text: nc.occ ? (nc.occ.title || Fq.t("(untitled)")) : ""; font.strikeout: nc.status === "Cancelled" }
         FText { width: parent.width; elide: Text.ElideRight; font.pixelSize: 12; color: nc.clash ? Fq.warn : Fq.sub
-                text: nc.occ ? [(nc.clash ? "⚠ " : "") + (nc.occ.allDay ? "All day" : Qt.formatTime(new Date(nc.occ.startTime), "hh:mm")),
+                text: nc.occ ? [(nc.clash ? "⚠ " : "") + (nc.occ.allDay ? Fq.t("All day") : Fq.fmtTime(new Date(nc.occ.startTime), "hh:mm")),
                                 Nights.fieldOf(nc.occ, "venue"), nc.status].filter(function (x) { return !!x }).join(" · ") : "" }
     }
     opacity: ma.dragging ? 0.35 : 1

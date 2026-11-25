@@ -24,9 +24,9 @@ ColumnLayout {
         else cs.app.postItem(cs.night, Ext.item("checkin", cs.night.id, { crew: c.id, at: Date.now() }, Crew.checkinId(c.id)), c.name + " is here")
     }
 
-    Sec { label: "Crew" + (cs.sum ? " (" + cs.sum + ")" : ""); action: "+ crew"; onAct: cs.editCrew(null) }
+    Sec { label: Fq.t("Crew") + (cs.sum ? " (" + cs.sum + ")" : ""); action: Fq.t("+ crew"); onAct: cs.editCrew(null) }
     FText { visible: cs.crew.length === 0; Layout.fillWidth: true; wrapMode: Text.Wrap; color: Fq.sub; font.pixelSize: 12
-        text: "No crew yet. Add people, or a role with no name as an open slot." }
+        text: Fq.t("No crew yet. Add people, or a role with no name as an open slot.") }
     Repeater {
         model: cs.crew
         delegate: Rectangle {
@@ -43,16 +43,16 @@ ColumnLayout {
                 FText { width: parent.width; elide: Text.ElideRight; font.pixelSize: 13
                     color: cr.modelData.status === "cancelled" || !cr.modelData.name ? Fq.sub : Fq.text
                     font.strikeout: cr.modelData.status === "cancelled"; font.italic: !cr.modelData.name
-                    text: (cr.modelData.role ? cr.modelData.role.toUpperCase() + "  " : "") + (cr.modelData.name ? cs.app.kithName(cr.modelData) : "open slot") }
+                    text: (cr.modelData.role ? cr.modelData.role.toUpperCase() + "  " : "") + (cr.modelData.name ? cs.app.kithName(cr.modelData) : Fq.t("open slot")) }
                 FText { width: parent.width; elide: Text.ElideRight; color: Fq.sub; font.pixelSize: 12; visible: text !== ""
-                    text: [cr.modelData.call ? "call " + cr.modelData.call : "", cr.modelData.name ? Lineup.cap(cr.modelData.status) : "",
-                           cr.modelData.checkedIn ? "here since " + Qt.formatTime(new Date(cr.modelData.checkedIn.at), "hh:mm") : ""].filter(function (x) { return !!x }).join(" · ") }
+                    text: [cr.modelData.call ? Fq.t("call ") + cr.modelData.call : "", cr.modelData.name ? Lineup.cap(cr.modelData.status) : "",
+                           cr.modelData.checkedIn ? "here since " + Fq.fmtTime(new Date(cr.modelData.checkedIn.at), "hh:mm") : ""].filter(function (x) { return !!x }).join(" · ") }
             }
             Chip {
                 id: here
                 visible: (!!cr.modelData.name && cr.modelData.status !== "cancelled") || !!cr.modelData.checkedIn
                 anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter
-                text: cr.modelData.checkedIn ? "HERE ✓" : "I'M HERE"; on: !!cr.modelData.checkedIn; enabled_: cr.canToggle && !cs.app.extBusy
+                text: cr.modelData.checkedIn ? Fq.t("HERE ✓") : Fq.t("I'M HERE"); on: !!cr.modelData.checkedIn; enabled_: cr.canToggle && !cs.app.extBusy
                 onClicked: cs.toggleCheckin(cr.modelData)
             }
         }

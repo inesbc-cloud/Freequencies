@@ -122,20 +122,21 @@ var FORMAT_ORDER = ["club", "concert", "festival", "residency", "community", "wo
 function rnd() { return Math.random().toString(36).slice(2, 10) }
 
 // The plan and the rows a new plan starts with. Rows: [{ table, order, cells }].
-function seedPlan(format) {
+function seedPlan(format, tr) {
+    tr = tr || function (s) { return s }
     var f = FORMATS[format]
     if (!f) return null
     var rows = []
     function add(table, cells) { rows.push({ table: table, order: rows.length * 10, cells: cells }) }
     var ms = f.milestones.slice().sort(function (a, b) { return b.t - a.t })
-    for (var i = 0; i < ms.length; i++) add("milestones", { t: ms[i].t, task: ms[i].task, owner: "", done: false })
+    for (var i = 0; i < ms.length; i++) add("milestones", { t: ms[i].t, task: tr(ms[i].task), owner: "", done: false })
     var r = f.rows || {}
-    for (var v = 0; v < (r.venue || []).length; v++) add("venue", { item: r.venue[v], owner: "", status: "To check", notes: "" })
-    for (var o = 0; o < (r.ros || []).length; o++) add("ros", { time: r.ros[o][0], what: r.ros[o][1], who: "", where: "" })
-    for (var k = 0; k < (r.risks || []).length; k++) add("risks", { risk: r.risks[k][0], l: r.risks[k][1], i: r.risks[k][2], plan: r.risks[k][3], owner: "", status: "Open" })
-    add("debrief", { topic: "Attendance", worked: "", change: "", owner: "" })
-    add("debrief", { topic: "Money", worked: "", change: "", owner: "" })
-    add("debrief", { topic: "Crew & team", worked: "", change: "", owner: "" })
+    for (var v = 0; v < (r.venue || []).length; v++) add("venue", { item: tr(r.venue[v]), owner: "", status: "To check", notes: "" })
+    for (var o = 0; o < (r.ros || []).length; o++) add("ros", { time: r.ros[o][0], what: tr(r.ros[o][1]), who: "", where: "" })
+    for (var k = 0; k < (r.risks || []).length; k++) add("risks", { risk: tr(r.risks[k][0]), l: r.risks[k][1], i: r.risks[k][2], plan: tr(r.risks[k][3]), owner: "", status: "Open" })
+    add("debrief", { topic: tr("Attendance"), worked: "", change: "", owner: "" })
+    add("debrief", { topic: tr("Money"), worked: "", change: "", owner: "" })
+    add("debrief", { topic: tr("Crew & team"), worked: "", change: "", owner: "" })
     return { plan: { format: format, modules: f.modules.slice(), custom: [] }, rows: rows }
 }
 

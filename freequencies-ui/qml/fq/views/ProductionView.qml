@@ -46,9 +46,9 @@ Rectangle {
             Rectangle { anchors.right: parent.right; width: 1; height: parent.height; color: Fq.line }
             ColumnLayout {
                 anchors.fill: parent; anchors.margins: 14; spacing: 8
-                DText { text: "PRODUCTION"; font.pixelSize: 34; color: Fq.lime }
-                FText { Layout.fillWidth: true; wrapMode: Text.Wrap; color: Fq.sub; font.pixelSize: 12; text: "A working plan for each event, shared with everyone organising it." }
-                FText { visible: pv.nights.length === 0; Layout.fillWidth: true; wrapMode: Text.Wrap; color: Fq.sub; font.pixelSize: 13; text: "No events yet. Add one with + Event." }
+                DText { text: Fq.t("PRODUCTION"); font.pixelSize: 34; color: Fq.lime }
+                FText { Layout.fillWidth: true; wrapMode: Text.Wrap; color: Fq.sub; font.pixelSize: 12; text: Fq.t("A working plan for each event, shared with everyone organising it.") }
+                FText { visible: pv.nights.length === 0; Layout.fillWidth: true; wrapMode: Text.Wrap; color: Fq.sub; font.pixelSize: 13; text: Fq.t("No events yet. Add one with + Event.") }
                 Flickable {
                     Layout.fillWidth: true; Layout.fillHeight: true; clip: true
                     contentWidth: width; contentHeight: nlist.implicitHeight
@@ -74,11 +74,11 @@ Rectangle {
                             x: 10; y: 7; width: parent.width - 20; spacing: 2
                             RowLayout {
                                 Layout.fillWidth: true; spacing: 8
-                                DText { text: Qt.formatDate(new Date(nr.modelData.startTime), "dd.MM"); font.pixelSize: 22; color: nr.modelData.startTime < pv.now ? Fq.faint : Fq.text }
-                                FText { Layout.fillWidth: true; elide: Text.ElideRight; font.pixelSize: 13; textFormat: Text.PlainText; text: nr.modelData.title || "(untitled)" }
+                                DText { text: Fq.fmtDate(new Date(nr.modelData.startTime), "dd.MM"); font.pixelSize: 22; color: nr.modelData.startTime < pv.now ? Fq.faint : Fq.text }
+                                FText { Layout.fillWidth: true; elide: Text.ElideRight; font.pixelSize: 13; textFormat: Text.PlainText; text: nr.modelData.title || Fq.t("(untitled)") }
                             }
                             FText { Layout.fillWidth: true; elide: Text.ElideRight; color: Fq.sub; font.pixelSize: 11
-                                text: nr.pl ? Production.FORMATS[nr.pl.format].label + " · " + nr.pg.done + "/" + nr.pg.total + " done" : "no plan yet" }
+                                text: nr.pl ? Fq.t(Production.FORMATS[nr.pl.format].label) + " · " + nr.pg.done + "/" + nr.pg.total + Fq.t(" done") : Fq.t("no plan yet") }
                             Rectangle { visible: !!nr.pg && nr.pg.total > 0; Layout.fillWidth: true; Layout.preferredHeight: 3; color: Fq.line
                                 Rectangle { height: parent.height; width: nr.pg && nr.pg.total ? parent.width * nr.pg.done / nr.pg.total : 0; color: Fq.lime } }
                         }
@@ -106,21 +106,21 @@ Rectangle {
                     Layout.fillWidth: true; spacing: 12
                     ColumnLayout {
                         Layout.fillWidth: true; spacing: -4
-                        FText { text: pv.night ? Qt.formatDate(new Date(pv.night.startTime), "dddd d MMMM yyyy").toUpperCase() + "  ·  " + (Nights.fieldOf(pv.night, "venue") || "no venue") : ""
+                        FText { text: pv.night ? Fq.fmtDate(new Date(pv.night.startTime), "dddd d MMMM yyyy").toUpperCase() + "  ·  " + (Nights.fieldOf(pv.night, "venue") || Fq.t("no venue")) : ""
                             color: Fq.sub; font.pixelSize: 12; font.letterSpacing: 1.2 }
-                        DText { Layout.fillWidth: true; elide: Text.ElideRight; text: pv.night ? (pv.night.title || "(untitled)").toUpperCase() : ""; font.pixelSize: 40 }
+                        DText { Layout.fillWidth: true; elide: Text.ElideRight; text: pv.night ? (pv.night.title || Fq.t("(untitled)")).toUpperCase() : ""; font.pixelSize: 40 }
                     }
-                    Badge { visible: !!pv.plan; text: pv.plan ? Production.FORMATS[pv.plan.format].label : "" }
-                    Link { text: "open in calendar"; onClicked: pv.app.openOccurrence(pv.night) }
+                    Badge { visible: !!pv.plan; text: pv.plan ? Fq.t(Production.FORMATS[pv.plan.format].label) : "" }
+                    Link { text: Fq.t("open in calendar"); onClicked: pv.app.openOccurrence(pv.night) }
                 }
                 FText { visible: !!pv.night && !pv.canEdit; Layout.fillWidth: true; wrapMode: Text.Wrap; color: Fq.warn; font.pixelSize: 12
-                    text: "Read-only: you're a " + Nights.roleOf(pv.cal) + " on this calendar." }
+                    text: Fq.t("Read-only: you're a ") + Nights.roleOf(pv.cal) + Fq.t(" on this calendar.") }
 
                 // no plan yet: pick a format
                 ColumnLayout {
                     visible: !!pv.night && !pv.plan; Layout.fillWidth: true; spacing: 10
                     FText { Layout.fillWidth: true; wrapMode: Text.Wrap; font.pixelSize: 14
-                        text: "What kind of event is it? Pick a format and Freequencies builds the plan: a timeline counted back from the date, the modules it needs, and a starting checklist. Change anything after." }
+                        text: Fq.t("What kind of event is it? Pick a format and Freequencies builds the plan: a timeline counted back from the date, the modules it needs, and a starting checklist. Change anything after.") }
                     GridLayout {
                         Layout.fillWidth: true; columns: Math.max(1, Math.floor(main.width / 260)); columnSpacing: -1; rowSpacing: -1
                         Repeater {
@@ -136,23 +136,23 @@ Rectangle {
                                 ColumnLayout {
                                     id: fcc
                                     x: 14; y: 13; width: parent.width - 28; spacing: 3
-                                    DText { text: fc.f.label.toUpperCase(); font.pixelSize: 24 }
-                                    FText { Layout.fillWidth: true; wrapMode: Text.Wrap; color: Fq.sub; font.pixelSize: 12; text: fc.f.blurb }
+                                    DText { text: Fq.t(fc.f.label).toUpperCase(); font.pixelSize: 24 }
+                                    FText { Layout.fillWidth: true; wrapMode: Text.Wrap; color: Fq.sub; font.pixelSize: 12; text: Fq.t(fc.f.blurb) }
                                     FText { Layout.fillWidth: true; wrapMode: Text.Wrap; color: Fq.faint; font.pixelSize: 11
-                                        text: fc.f.modules.length + " modules · " + fc.f.milestones.length + " milestones" }
+                                        text: fc.f.modules.length + Fq.t(" modules · ") + fc.f.milestones.length + Fq.t(" milestones") }
                                 }
                             }
                         }
                     }
-                    FText { visible: pv.app.planBusy; text: "Building the plan…"; color: Fq.warn; font.pixelSize: 12 }
+                    FText { visible: pv.app.planBusy; text: Fq.t("Building the plan…"); color: Fq.warn; font.pixelSize: 12 }
                 }
 
                 // the plan: module tabs
                 Flow {
                     visible: !!pv.plan; Layout.fillWidth: true; spacing: 6
                     Repeater { model: pv.mods
-                        delegate: Chip { required property var modelData; text: Production.moduleDef(pv.plan, modelData).t; on: pv.cur === modelData; onClicked: pv.mod = modelData } }
-                    Chip { visible: pv.canEdit; text: pv.adding ? "− close" : "+ module"; accent: Fq.signal; onClicked: pv.adding = !pv.adding }
+                        delegate: Chip { required property var modelData; text: Fq.t(Production.moduleDef(pv.plan, modelData).t); on: pv.cur === modelData; onClicked: pv.mod = modelData } }
+                    Chip { visible: pv.canEdit; text: pv.adding ? Fq.t("− close") : Fq.t("+ module"); accent: Fq.signal; onClicked: pv.adding = !pv.adding }
                 }
                 // add / remove modules, custom modules
                 Rectangle {
@@ -160,25 +160,25 @@ Rectangle {
                     ColumnLayout {
                         id: addc
                         x: 12; y: 12; width: parent.width - 24; spacing: 8
-                        Label_ { text: "ADD A MODULE" }
+                        Label_ { text: Fq.t("ADD A MODULE") }
                         Flow { Layout.fillWidth: true; spacing: 6
                             Repeater { model: pv.plan ? Production.missingModules(pv.plan) : []
-                                delegate: Chip { required property var modelData; text: "+ " + Production.MODULES[modelData].t
+                                delegate: Chip { required property var modelData; text: "+ " + Fq.t(Production.MODULES[modelData].t)
                                     onClicked: { var p = JSON.parse(JSON.stringify(pv.plan)); p.modules.push(modelData); pv.app.setPlan(pv.night, p, "Added " + Production.MODULES[modelData].t); pv.mod = modelData } } } }
-                        Label_ { text: "OR BUILD YOUR OWN" }
+                        Label_ { text: Fq.t("OR BUILD YOUR OWN") }
                         RowLayout {
                             Layout.fillWidth: true; spacing: 8
-                            Field { id: cmName; Layout.preferredWidth: 160; placeholderText: "Name, e.g. Merch" }
-                            Field { id: cmCols; Layout.fillWidth: true; placeholderText: "Columns: Item, Qty:num, Price:money, Done:check" }
-                            FqButton { text: "Create"; onClicked: {
+                            Field { id: cmName; Layout.preferredWidth: 160; placeholderText: Fq.t("Name, e.g. Merch") }
+                            Field { id: cmCols; Layout.fillWidth: true; placeholderText: Fq.t("Columns: Item, Qty:num, Price:money, Done:check") }
+                            FqButton { text: Fq.t("Create"); onClicked: {
                                 var r = Production.customModule(cmName.text, cmCols.text)
                                 if (r.error) { pv.app.notify(r.error, true); return }
                                 var p = JSON.parse(JSON.stringify(pv.plan)); p.custom.push(r.module); p.modules.push(r.module.id)
                                 pv.app.setPlan(pv.night, p, "Module " + r.module.name + " added"); pv.mod = r.module.id; cmName.text = ""; cmCols.text = ""
                             } }
                         }
-                        FText { Layout.fillWidth: true; wrapMode: Text.Wrap; color: Fq.faint; font.pixelSize: 11; text: "Column types: text, long, num, money, date, time, check." }
-                        Link { visible: pv.cur !== ""; text: "remove the " + (pv.curDef ? pv.curDef.t : "") + " module from this plan (its rows are kept)"; tone: Fq.red
+                        FText { Layout.fillWidth: true; wrapMode: Text.Wrap; color: Fq.faint; font.pixelSize: 11; text: Fq.t("Column types: text, long, num, money, date, time, check.") }
+                        Link { visible: pv.cur !== ""; text: Fq.t("remove the ") + (pv.curDef ? Fq.t(pv.curDef.t) : "") + Fq.t(" module from this plan (its rows are kept)"); tone: Fq.red
                             onClicked: { var p = JSON.parse(JSON.stringify(pv.plan)); p.modules = p.modules.filter(function (m) { return m !== pv.cur }); pv.app.setPlan(pv.night, p, "Module removed") } }
                     }
                 }
@@ -200,17 +200,17 @@ Rectangle {
                     ChecklistSection {
                         visible: pv.curDef && pv.curDef.section === "posts"
                         app: pv.app; night: pv.night; canEdit: pv.canEdit
-                        kind: "post"; label: "Social posts"; addLabel: "+ post"
+                        kind: "post"; label: Fq.t("Social posts"); addLabel: Fq.t("+ post")
                         items: Checklist.postsOf(pv.night)
-                        emptyText: "Plan what goes out and when: announcement, line-up reveal, day-of stories, recap."
-                        meta: function (it) { return [it.d.channel || "", it.d.when ? Qt.formatDateTime(new Date(it.d.when), "ddd d MMM hh:mm") : "unscheduled"].join(" · ") }
+                        emptyText: Fq.t("Plan what goes out and when: announcement, line-up reveal, day-of stories, recap.")
+                        meta: function (it) { return [it.d.channel || "", it.d.when ? Fq.fmtDateTime(new Date(it.d.when), "ddd d MMM hh:mm") : "unscheduled"].join(" · ") }
                         tone: function (it) { return Checklist.postDueSoon(it, Date.now()) ? Fq.warn : Fq.sub }
                         onEditItem: function (k, it) { itemPopup.openFor(k, it) }
                     }
                     ChecklistSection {
                         visible: pv.curDef && pv.curDef.section === "gear"
                         app: pv.app; night: pv.night; canEdit: pv.canEdit
-                        kind: "gear"; label: "Gear (" + Checklist.packedCount(pv.night) + "/" + Checklist.gearOf(pv.night).length + " packed)"; addLabel: "+ item"
+                        kind: "gear"; label: Fq.t("Gear (") + Checklist.packedCount(pv.night) + "/" + Checklist.gearOf(pv.night).length + Fq.t(" packed)"); addLabel: Fq.t("+ item")
                         items: Checklist.gearOf(pv.night)
                         onEditItem: function (k, it) { itemPopup.openFor(k, it) }
                     }
@@ -224,5 +224,5 @@ Rectangle {
     CrewPopup { id: crewPopup; app: pv.app; night: pv.night }
     TicketsPopup { id: ticketsPopup; app: pv.app; night: pv.night }
     ItemPopup { id: itemPopup; app: pv.app; night: pv.night }
-    FileDialog { id: fileDialog; title: "Attach a file to this event"; onAccepted: pv.app.uploadToNight(pv.night, fileDialog.selectedFile) }
+    FileDialog { id: fileDialog; title: Fq.t("Attach a file to this event"); onAccepted: pv.app.uploadToNight(pv.night, fileDialog.selectedFile) }
 }

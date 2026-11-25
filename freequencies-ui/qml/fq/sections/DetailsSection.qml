@@ -26,45 +26,45 @@ ColumnLayout {
     }
     onNightChanged: editing = false
 
-    Sec { label: "Details"; action: ds.canEdit && !ds.editing ? "edit" : ""; onAct: ds.startEdit() }
+    Sec { label: Fq.t("Details"); action: ds.canEdit && !ds.editing ? Fq.t("edit") : ""; onAct: ds.startEdit() }
 
     // read view
     ColumnLayout {
         visible: !ds.editing; Layout.fillWidth: true; spacing: 3
         FText { visible: Details.summary(ds.d) === "" && !ds.d.access && !ds.d.link; Layout.fillWidth: true; wrapMode: Text.Wrap; color: Fq.sub; font.pixelSize: 12
-            text: "Expected audience, tickets, age policy, accessibility. All optional." }
-        FText { visible: Details.summary(ds.d) !== ""; Layout.fillWidth: true; wrapMode: Text.Wrap; font.pixelSize: 13; text: Details.summary(ds.d) }
-        FText { visible: !!ds.d.access; Layout.fillWidth: true; wrapMode: Text.Wrap; color: Fq.sub; font.pixelSize: 12; textFormat: Text.PlainText; text: "Access: " + (ds.d.access || "") }
+            text: Fq.t("Expected audience, tickets, age policy, accessibility. All optional.") }
+        FText { visible: Details.summary(ds.d) !== ""; Layout.fillWidth: true; wrapMode: Text.Wrap; font.pixelSize: 13; text: Details.summary(ds.d, Fq.t) }
+        FText { visible: !!ds.d.access; Layout.fillWidth: true; wrapMode: Text.Wrap; color: Fq.sub; font.pixelSize: 12; textFormat: Text.PlainText; text: Fq.t("Access: ") + (ds.d.access || "") }
         Link { visible: !!ds.d.link; text: ds.d.link || ""; onClicked: Qt.openUrlExternally(ds.d.link) }
     }
 
     // edit view
     ColumnLayout {
         visible: ds.editing; Layout.fillWidth: true; spacing: 6
-        Label_ { text: "EXPECTED AUDIENCE" }
+        Label_ { text: Fq.t("EXPECTED AUDIENCE") }
         Flow { Layout.fillWidth: true; spacing: 6
             Repeater { model: Details.audiences
-                delegate: Chip { required property var modelData; text: modelData; on: ds.audience === modelData; onClicked: ds.audience = on ? "" : modelData } } }
-        Label_ { text: "TICKETS" }
+                delegate: Chip { required property var modelData; text: Fq.t(modelData); on: ds.audience === modelData; onClicked: ds.audience = on ? "" : modelData } } }
+        Label_ { text: Fq.t("TICKETS") }
         RowLayout {
             Layout.fillWidth: true; spacing: 6
-            Chip { text: "Free"; on: ds.free; onClicked: ds.free = !ds.free }
-            Field { id: priceIn; enabled: !ds.free; Layout.fillWidth: true; placeholderText: "Price" }
+            Chip { text: Fq.t("Free"); on: ds.free; onClicked: ds.free = !ds.free }
+            Field { id: priceIn; enabled: !ds.free; Layout.fillWidth: true; placeholderText: Fq.t("Price") }
             Field { id: curIn; enabled: !ds.free; Layout.preferredWidth: 64 }
         }
-        Label_ { text: "AGE" }
+        Label_ { text: Fq.t("AGE") }
         Flow { Layout.fillWidth: true; spacing: 6
             Repeater { model: Details.ages
-                delegate: Chip { required property var modelData; text: modelData; on: ds.age === modelData; onClicked: ds.age = on ? "" : modelData } } }
-        Label_ { text: "ACCESSIBILITY" }
-        Field { id: accessIn; Layout.fillWidth: true; placeholderText: "Step-free entry, quiet room…" }
-        Label_ { text: "LINK" }
+                delegate: Chip { required property var modelData; text: Fq.t(modelData); on: ds.age === modelData; onClicked: ds.age = on ? "" : modelData } } }
+        Label_ { text: Fq.t("ACCESSIBILITY") }
+        Field { id: accessIn; Layout.fillWidth: true; placeholderText: Fq.t("Step-free entry, quiet room…") }
+        Label_ { text: Fq.t("LINK") }
         Field { id: linkIn; Layout.fillWidth: true; placeholderText: "https://" }
         RowLayout {
             Layout.fillWidth: true; spacing: 8
             Item { Layout.fillWidth: true }
-            FqButton { text: "Cancel"; onClicked: ds.editing = false }
-            FqButton { text: "Save"; primary: true; enabled: !ds.app.extBusy
+            FqButton { text: Fq.t("Cancel"); onClicked: ds.editing = false }
+            FqButton { text: Fq.t("Save"); primary: true; enabled: !ds.app.extBusy
                 onClicked: ds.app.saveDetails(ds.night, { audience: ds.audience, free: ds.free, price: ds.free ? "" : priceIn.text, currency: curIn.text,
                                                           age: ds.age, access: accessIn.text, link: linkIn.text }, function (ok) { if (ok) ds.editing = false }) }
         }

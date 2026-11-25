@@ -27,9 +27,9 @@ ColumnLayout {
     }
     function mainCol() { var cs = def ? def.cols.filter(function (c) { return c.type === "long" || c.type === "text" }) : []; return cs.length ? cs[0] : null }
 
-    Sec { label: pt.def ? pt.def.t + " (" + pt.rows.length + ")" : ""; action: pt.canEdit ? "+ row" : ""; onAct: pt.editRow(pt.table, null) }
-    FText { visible: !!pt.def && pt.def.lead !== ""; Layout.fillWidth: true; wrapMode: Text.Wrap; color: Fq.faint; font.pixelSize: 12; text: pt.def ? pt.def.lead : "" }
-    FText { visible: pt.rows.length === 0; color: Fq.sub; font.pixelSize: 12; text: "Nothing here yet." }
+    Sec { label: pt.def ? Fq.t(pt.def.t) + " (" + pt.rows.length + ")" : ""; action: pt.canEdit ? Fq.t("+ row") : ""; onAct: pt.editRow(pt.table, null) }
+    FText { visible: !!pt.def && pt.def.lead !== ""; Layout.fillWidth: true; wrapMode: Text.Wrap; color: Fq.faint; font.pixelSize: 12; text: pt.def ? Fq.t(pt.def.lead) : "" }
+    FText { visible: pt.rows.length === 0; color: Fq.sub; font.pixelSize: 12; text: Fq.t("Nothing here yet.") }
 
     Repeater {
         model: pt.rows
@@ -60,22 +60,22 @@ ColumnLayout {
                 FText {   // milestones: T-label and the real date
                     visible: pt.table === "milestones"; Layout.preferredWidth: 96; Layout.alignment: Qt.AlignTop; font.pixelSize: 12
                     color: rw.late ? Fq.red : Fq.acid
-                    text: Production.tLabel(rw.c.t) + (rw.due ? "\n" + Qt.formatDate(new Date(rw.due), "ddd d MMM") : "")
+                    text: Fq.t(Production.tLabel(rw.c.t)) + (rw.due ? Fq.t("\n") + Fq.fmtDate(new Date(rw.due), "ddd d MMM") : "")
                 }
                 FText { visible: pt.table === "ros"; Layout.preferredWidth: 52; Layout.alignment: Qt.AlignTop; font.pixelSize: 14; font.bold: true; color: Fq.acid; text: rw.c.time || "" }
                 ColumnLayout {
                     Layout.fillWidth: true; spacing: 2
                     FText { Layout.fillWidth: true; wrapMode: Text.Wrap; font.pixelSize: 13; textFormat: Text.PlainText; font.strikeout: rw.done && !!pt.checkCol
-                        text: rw.mc ? (rw.c[rw.mc.k] || "(empty)") : "" }
+                        text: rw.mc ? (rw.c[rw.mc.k] || Fq.t("(empty)")) : "" }
                     FText {
                         Layout.fillWidth: true; wrapMode: Text.Wrap; color: Fq.sub; font.pixelSize: 12; textFormat: Text.PlainText
                         readonly property string line: pt.def ? pt.def.cols.filter(function (cc) {
                             return cc !== rw.mc && cc.type !== "check" && cc.type !== "tminus" && !(pt.table === "ros" && cc.k === "time") && !(pt.table === "risks" && (cc.k === "l" || cc.k === "i")) && pt.cellText(cc, rw.c[cc.k]) !== ""
-                        }).map(function (cc) { return (cc.type === "select" || cc.type === "text" && cc.k === "owner" ? "" : cc.l + ": ") + pt.cellText(cc, rw.c[cc.k]) }).join("  ·  ") : ""
+                        }).map(function (cc) { return (cc.type === "select" || cc.type === "text" && cc.k === "owner" ? "" : Fq.t(cc.l) + ": ") + (cc.type === "select" ? Fq.t(pt.cellText(cc, rw.c[cc.k])) : pt.cellText(cc, rw.c[cc.k])) }).join("  ·  ") : ""
                         visible: line !== ""; text: line
                     }
                 }
-                Badge { visible: pt.table === "risks" && rw.risk > 0; Layout.alignment: Qt.AlignTop; text: "risk " + rw.risk + " (" + rw.c.l + "×" + rw.c.i + ")"
+                Badge { visible: pt.table === "risks" && rw.risk > 0; Layout.alignment: Qt.AlignTop; text: Fq.t("risk ") + rw.risk + " (" + rw.c.l + "×" + rw.c.i + ")"
                     tone: rw.risk >= 6 ? Fq.red : rw.risk >= 3 ? Fq.warn : Fq.faint }
             }
         }
