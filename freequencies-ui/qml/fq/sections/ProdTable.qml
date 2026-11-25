@@ -75,6 +75,8 @@ ColumnLayout {
                         visible: line !== ""; text: line
                     }
                 }
+                Link { visible: pt.table === "debrief" && !!pt.app.networkAnchor && (!!rw.c.worked || !!rw.c.change); Layout.alignment: Qt.AlignTop
+                    text: Fq.t("share with Lisboa"); onClicked: pt.app.shareLesson(pt.night, rw.modelData) }
                 Badge { visible: pt.table === "risks" && rw.risk > 0; Layout.alignment: Qt.AlignTop; text: Fq.t("risk ") + rw.risk + " (" + rw.c.l + "×" + rw.c.i + ")"
                     tone: rw.risk >= 6 ? Fq.red : rw.risk >= 3 ? Fq.warn : Fq.faint }
             }

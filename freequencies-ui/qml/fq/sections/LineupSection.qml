@@ -31,7 +31,7 @@ ColumnLayout {
                 Row {
                     spacing: 6
                     FText { visible: bk.index % 2 === 0; text: "(("; color: Fq.bracket; font.pixelSize: 13; font.bold: true; anchors.verticalCenter: parent.verticalCenter }
-                    DText { text: ls.app.kithName(bk.modelData).toUpperCase(); font.pixelSize: 24; color: bk.modelData.status === "cancelled" ? Fq.sub : Fq.text
+                    DText { text: ls.app.kithName(bk.modelData).toUpperCase(); size: 24; color: bk.modelData.status === "cancelled" ? Fq.sub : Fq.text
                             font.strikeout: bk.modelData.status === "cancelled" }
                     FText { visible: bk.index % 2 === 1; text: "))"; color: Fq.bracket; font.pixelSize: 13; font.bold: true; anchors.verticalCenter: parent.verticalCenter }
                 }

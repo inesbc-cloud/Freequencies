@@ -21,7 +21,7 @@ ColumnLayout {
     function startEdit() {
         audience = d.audience || ""; free = d.free === true; age = d.age || ""
         priceIn.text = typeof d.price === "number" ? String(d.price) : ""; curIn.text = d.currency || "EUR"
-        accessIn.text = d.access || ""; linkIn.text = d.link || ""
+        accessIn.text = d.access || ""; linkIn.text = d.link || ""; onCallIn.text = d.onCall || ""; lawyerIn.text = d.lawyer || ""
         editing = true
     }
     onNightChanged: editing = false
@@ -60,13 +60,17 @@ ColumnLayout {
         Field { id: accessIn; Layout.fillWidth: true; placeholderText: Fq.t("Step-free entry, quiet room…") }
         Label_ { text: Fq.t("LINK") }
         Field { id: linkIn; Layout.fillWidth: true; placeholderText: "https://" }
+        Label_ { text: Fq.t("ON CALL TONIGHT (FOR THE HELP BUTTON)") }
+        RowLayout { Layout.fillWidth: true; spacing: 6
+            Field { id: onCallIn; Layout.fillWidth: true; placeholderText: Fq.t("Name and phone") }
+            Field { id: lawyerIn; Layout.fillWidth: true; placeholderText: Fq.t("Lawyer: name and phone") } }
         RowLayout {
             Layout.fillWidth: true; spacing: 8
             Item { Layout.fillWidth: true }
             FqButton { text: Fq.t("Cancel"); onClicked: ds.editing = false }
             FqButton { text: Fq.t("Save"); primary: true; enabled: !ds.app.extBusy
                 onClicked: ds.app.saveDetails(ds.night, { audience: ds.audience, free: ds.free, price: ds.free ? "" : priceIn.text, currency: curIn.text,
-                                                          age: ds.age, access: accessIn.text, link: linkIn.text }, function (ok) { if (ok) ds.editing = false }) }
+                                                          age: ds.age, access: accessIn.text, link: linkIn.text, onCall: onCallIn.text, lawyer: lawyerIn.text }, function (ok) { if (ok) ds.editing = false }) }
         }
     }
 }

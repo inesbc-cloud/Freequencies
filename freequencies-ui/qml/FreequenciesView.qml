@@ -32,6 +32,9 @@ import "fq/lib/funding.js" as Funding
 import "fq/lib/production.js" as Production
 import "fq/lib/promo.js" as Promo
 import "fq/lib/listings.js" as Listings
+import "fq/lib/deal.js" as Deal
+import "fq/lib/network.js" as Network
+import "fq/lib/legal.js" as Legal
 import "fq/lib/colour.js" as Colour
 import "fq/lib/ext.js" as Ext
 import "fq/lib/tags.js" as Tags
@@ -216,6 +219,7 @@ Item {
     property var events: []             // flat list across all calendars (Funding calendars excluded)
     property var fundingCals: []        // calendars holding the funding library (fq/lib/funding.js)
     property var fundingEvents: []
+    property var networkEvents: []      // the Network anchor event(s) in the Lisboa calendar
     property date viewMonth: new Date()   // any date in the shown month
     property date selectedDay: new Date()
     property string filterCalId: ""      // "" = all calendars (single-focus filter)
@@ -319,6 +323,9 @@ Item {
                     root.fundingEvents = evs.filter(function (e) { return !!fid[e.calendarId] })
                     cals = cals.filter(function (c) { return !fid[c.id] })
                     evs = evs.filter(function (e) { return !fid[e.calendarId] })
+                    // the Network anchor (in the Lisboa calendar) holds shared data; it isn't an event to show
+                    root.networkEvents = evs.filter(function (e) { return e.fields && e.fields[Network.MARKER] === "anchor" })
+                    evs = evs.filter(function (e) { return !(e.fields && e.fields[Network.MARKER] === "anchor") })
                     root.calendars = cals; root.calAddr = ca; root.scalaEvents = evs; root.events = evs.concat(root.listings)
                     root.refreshBusy = false
                     if (root.refreshAgain) { root.refreshAgain = false; root.refresh() }
@@ -555,6 +562,52 @@ Item {
     }
 
     function setLang(l) { Fq.setLang(l) }     // the EN | PT switch (also used by the preview)
+
+    // ── Network (fq/lib/network.js): shared venue directory, gear library, crew pool, polls ──
+    readonly property var networkAnchor: root.communityCal ? Network.anchorOf(root.networkEvents, root.communityCal.id) : null
+    property bool networkBusy: false
+    function setupNetwork() {
+        if (!root.communityCal || root.networkBusy) return
+        root.networkBusy = true
+        root.coreAsync("createEvent", [root.communityCal.id, JSON.stringify(Network.anchorEvent())], function () {
+            root.networkBusy = false; root.notify(Fq.t("Network ready: everyone in Lisboa can now share venues, gear and crew.")); root.refresh()
+        })
+    }
+    function postNet(kind, data, id, okMsg, cb) {
+        var a = root.networkAnchor; if (!a) { root.notify(Fq.t("Set up the Network first."), true); return }
+        root.postItem(a, Ext.item(kind, a.id, data, id || (kind + ":" + Ext.rnd())), okMsg || Fq.t("Shared"), cb)
+    }
+    function deleteNet(id, cb) { if (root.networkAnchor) root.deleteItem(root.networkAnchor, id, Fq.t("Removed"), cb) }
+    // A vote on a poll (on an event or the network): the newest per person counts.
+    function vote(ev, pollId, choice) { root.putLatest(ev, "vote", { poll: pollId, choice: choice }, Fq.t("Voted"), function (d) { return d.poll === pollId }) }
+    // My address on a calendar (who "me" is for votes and ownership).
+    function meOn(ev) { var c = ev ? (root.calById(ev.calendarId) || null) : null; return c ? (c.authorAddr || "") : "" }
+
+    // ── Resources: inspections log and lessons learnt (fq/lib/legal.js) ──
+    function logInspection(night, data, cb) {
+        root.postItem(night, Ext.item("inspection", night.id, data, "inspection:" + Ext.rnd()), Fq.t("Inspection logged"), function (ok) {
+            if (ok && data.share && root.networkAnchor)
+                root.postNet("inspect-pattern", Legal.anonymised({ d: data, at: night.startTime }), "", Fq.t("Shared anonymously"))
+            if (cb) cb(ok)
+        })
+    }
+    function shareLesson(night, row) {
+        var plan = Production.planOf(night), r = Legal.lessonFrom(row, plan ? Fq.t(Production.FORMATS[plan.format].label) : "")
+        if (r.error) { root.notify(Fq.t(r.error), true); return }
+        if (!root.networkAnchor) { root.notify(Fq.t("Lessons are shared through the Network: start it in the Network tab."), true); return }
+        root.postNet("lesson", r.data, "", Fq.t("Shared with Lisboa"))
+    }
+    function openResources(tab, part) { root.section = "resources"; resourcesView.tab = tab || "legal"; if (part) resourcesView.part = part }
+
+    // Deal calculator → budget lines (fq/lib/deal.js)
+    function addDealToBudget(night, d, fill) {
+        var lines = Deal.budgetLines(d, fill, "")
+        var left = lines.length
+        for (var i = 0; i < lines.length; i++) {
+            var l = lines[i], it = Ext.item("budget", night.id, { label: Fq.t(l.label), amount: l.amount, currency: "EUR", dir: l.dir }, "budget:" + Ext.rnd())
+            root.coreAsync("postExt", [night.calendarId, JSON.stringify(it)], function () { if (--left === 0) { root.notify(Fq.t("Added to the budget")); root.refresh() } })
+        }
+    }
 
     // ── sections of the app: home · calendar (month/week/…/venues/analytics/funding) · production ──
     property string section: "home"
@@ -1253,14 +1306,14 @@ Item {
         id: fqHeader
         overdue: Checklist.overdueCount(root.freqNights, root.nowTick)
         // the app's sections: one row of tabs, the calendar's own modes stay inside Calendar
-        readonly property bool inCal: root.section === "calendar" && ["venues", "stats", "funding"].indexOf(root.calMode) < 0
+        // the app's sections (ADR 0010/0011): one row of tabs; the calendar's own modes stay inside Calendar
         FqButton { objectName: "tabHome"; text: Fq.t("Home"); primary: root.section === "home"; onClicked: root.section = "home" }
-        FqButton { text: Fq.t("Calendar"); primary: fqHeader.inCal; onClicked: root.showCalendar(["venues", "stats", "funding"].indexOf(root.calMode) >= 0 ? "month" : "") }
+        FqButton { text: Fq.t("Calendar"); primary: root.section === "calendar"; onClicked: root.showCalendar("") }
         FqButton { objectName: "tabProduction"; text: Fq.t("Production"); primary: root.section === "production"; onClicked: root.openProduction(null) }
         FqButton { objectName: "tabPromo"; text: Fq.t("Promo"); primary: root.section === "promo"; onClicked: root.section = "promo" }
-        FqButton { text: Fq.t("Funding"); primary: root.section === "calendar" && root.calMode === "funding"; onClicked: root.showCalendar("funding") }
-        FqButton { text: Fq.t("Venues"); primary: root.section === "calendar" && root.calMode === "venues"; onClicked: root.showCalendar("venues") }
-        FqButton { text: Fq.t("Analytics"); primary: root.section === "calendar" && root.calMode === "stats"; onClicked: root.showCalendar("stats") }
+        FqButton { objectName: "tabNetwork"; text: Fq.t("Network"); primary: root.section === "network"; onClicked: root.section = "network" }
+        FqButton { objectName: "tabResources"; text: Fq.t("Resources"); primary: root.section === "resources"; onClicked: root.section = "resources" }
+        FqButton { objectName: "tabReports"; text: Fq.t("Reports"); primary: root.section === "reports"; onClicked: root.section = "reports" }
         FqButton { text: Fq.t("+ Event"); primary: true; onClicked: root.openQuickNight() }
         Row {   // language: EN | PT (compact, top right)
             spacing: 6
@@ -1277,6 +1330,30 @@ Item {
         }
         anchors.top: soonBanner.bottom; anchors.left: parent.left; anchors.right: parent.right
     }
+    // HELP, bottom right beside the skins: emergency numbers, tonight's on-call contact and lawyer, your rights
+    Rectangle {
+        objectName: "helpButton"
+        z: 9000; width: helpT.implicitWidth + 22; height: 26; color: helpMA.containsMouse ? Qt.darker(Fq.red, 1.2) : Fq.red
+        anchors.right: skinRow.left; anchors.rightMargin: 10; anchors.bottom: parent.bottom; anchors.bottomMargin: 10
+        FText { id: helpT; anchors.centerIn: parent; text: Fq.t("HELP"); color: "#ffffff"; font.pixelSize: 12; font.bold: true; font.letterSpacing: 1.5 }
+        MouseArea { id: helpMA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: helpPopup.open() }
+    }
+    HelpPopup { id: helpPopup; app: root }
+    property alias dlgHelp: helpPopup
+
+    // Skin switcher, bottom right: Classic · 8-bit (remembered)
+    Row {
+        id: skinRow
+        z: 9000; spacing: 4
+        anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.margins: 10
+        Repeater {
+            model: [{ k: "classic", l: "Classic" }, { k: "pixel", l: "8-bit" }]
+            delegate: Chip { required property var modelData; objectName: "skin_" + modelData.k; height: 22
+                text: Fq.t(modelData.l); on: Fq.skin === modelData.k; onClicked: Fq.setSkin(modelData.k) }
+        }
+    }
+    function setSkin(k) { Fq.setSkin(k) }     // also used by the preview
+
     // The quick new-night form (name, date, venue, times, line-up; more details optional).
     property alias dlgQuickNight: quickNight
     NewNightPopup { id: quickNight; app: root }
@@ -1295,6 +1372,24 @@ Item {
         anchors.top: fqHeader.bottom; anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
     }
 
+    // Network (venues now; gear, crew pool and polls next), Resources (funding; legal toolkit next), Reports
+    Rectangle {
+        id: networkPage
+        visible: root.section === "network"; color: Fq.ground
+        anchors.top: fqHeader.bottom; anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
+        NetworkView { id: networkView; anchors.fill: parent; anchors.margins: 20; app: root }
+    }
+    Rectangle {
+        id: resourcesPage
+        visible: root.section === "resources"; color: Fq.ground
+        anchors.top: fqHeader.bottom; anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
+        ResourcesView { id: resourcesView; anchors.fill: parent; app: root }
+    }
+    ReportsView {
+        id: reportsView
+        visible: root.section === "reports"; app: root
+        anchors.top: fqHeader.bottom; anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
+    }
     PromoView {
         id: promoView
         visible: root.section === "promo"; app: root
@@ -1317,7 +1412,7 @@ Item {
                 anchors.margins: Theme.spacing.medium
                 spacing: Theme.spacing.small
 
-                DText { text: (Fq.t("Calendars")).toUpperCase(); color: root.cText; font.pixelSize: 30 }
+                DText { text: (Fq.t("Calendars")).toUpperCase(); color: root.cText; size: 30 }
 
                 Rectangle {
                     Layout.fillWidth: true; height: 36; radius: 0
@@ -1468,12 +1563,9 @@ Item {
                     text: (root.calMode === "week" ? root.weekLabel(root.selectedDay)
                         : root.calMode === "board" ? root.boardLabel(root.selectedDay)
                         : root.calMode === "timeline" ? "Timeline"
-                        : root.calMode === "venues" ? "Venues"
-                        : root.calMode === "stats" ? "Analytics"
-                        : root.calMode === "funding" ? "Funding"
                         : root.calMode === "day" ? Fq.fmtDate(root.selectedDay, "dddd, MMMM d")
                         : root.monthNames[root.viewMonth.getMonth()] + " " + root.viewMonth.getFullYear()).toUpperCase()
-                    color: root.cText; font.pixelSize: 34
+                    color: root.cText; size: 34
                     Layout.leftMargin: 4
                 }
                 // Month / Week segmented toggle
@@ -1507,8 +1599,8 @@ Item {
                 // Freequencies (#24): Debug and + Night live in the app header, so the grid gets the width.
             }
 
-            ColourBar { app: root; visible: root.calMode !== "venues" && root.calMode !== "stats" && root.calMode !== "funding"; Layout.fillWidth: true; Layout.leftMargin: Theme.spacing.medium; Layout.rightMargin: Theme.spacing.medium }
-            FilterBar { app: root; visible: root.calMode !== "funding"; Layout.fillWidth: true; Layout.leftMargin: Theme.spacing.medium; Layout.rightMargin: Theme.spacing.medium; Layout.bottomMargin: 6 }
+            ColourBar { app: root; Layout.fillWidth: true; Layout.leftMargin: Theme.spacing.medium; Layout.rightMargin: Theme.spacing.medium }
+            FilterBar { app: root; Layout.fillWidth: true; Layout.leftMargin: Theme.spacing.medium; Layout.rightMargin: Theme.spacing.medium; Layout.bottomMargin: 6 }
 
             RowLayout {
                 visible: root.calMode === "month"
@@ -1648,25 +1740,6 @@ Item {
             TimelineView {
                 visible: root.calMode === "timeline"
                 app: root
-                Layout.fillWidth: true; Layout.fillHeight: true
-                Layout.leftMargin: Theme.spacing.medium; Layout.rightMargin: Theme.spacing.medium; Layout.bottomMargin: Theme.spacing.medium
-            }
-
-            // ── Freequencies overviews: venues (#26), analytics (#27) ──
-            VenuesView {
-                visible: root.calMode === "venues"; app: root
-                Layout.fillWidth: true; Layout.fillHeight: true
-                Layout.leftMargin: Theme.spacing.medium; Layout.rightMargin: Theme.spacing.medium; Layout.bottomMargin: Theme.spacing.medium
-            }
-            AnalyticsView {
-                visible: root.calMode === "stats"; app: root
-                Layout.fillWidth: true; Layout.fillHeight: true
-                Layout.leftMargin: Theme.spacing.medium; Layout.rightMargin: Theme.spacing.medium; Layout.bottomMargin: Theme.spacing.medium
-            }
-            // ── funding library: winning applications and links to funding ──
-            FundingView {
-                id: fundingView
-                visible: root.calMode === "funding"; app: root
                 Layout.fillWidth: true; Layout.fillHeight: true
                 Layout.leftMargin: Theme.spacing.medium; Layout.rightMargin: Theme.spacing.medium; Layout.bottomMargin: Theme.spacing.medium
             }
@@ -2372,7 +2445,7 @@ Item {
         ColumnLayout {
             id: evCol
             width: evFlick.width; spacing: Theme.spacing.small
-            DText { text: (root.editingEvent ? Fq.t("Edit event") : Fq.t("New event")).toUpperCase(); color: root.cText; font.pixelSize: 30 }
+            DText { text: (root.editingEvent ? Fq.t("Edit event") : Fq.t("New event")).toUpperCase(); color: root.cText; size: 30 }
 
             FText { text: Fq.t("Calendar"); color: root.cFaint; font.pixelSize: 12 }
             ComboBox {
@@ -2881,7 +2954,7 @@ Item {
         background: Rectangle { radius: 0; color: root.cSurface; border.width: 1; border.color: root.cSurface2 }
         ColumnLayout {
             width: parent.width; spacing: Theme.spacing.medium
-            DText { text: (Fq.t("Identities")).toUpperCase(); color: root.cText; font.pixelSize: 30 }
+            DText { text: (Fq.t("Identities")).toUpperCase(); color: root.cText; size: 30 }
             FText { text: Fq.t("Keys live in loam_core and never leave it. ★ = default for new calendars — tap an identity to make it the default.")
                 color: root.cFaint; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true }
             Repeater {
@@ -3136,7 +3209,7 @@ Item {
         ColumnLayout {
             anchors.fill: parent; spacing: Theme.spacing.small
 
-            DText { text: (Fq.t("New calendar")).toUpperCase(); color: root.cText; font.pixelSize: 30 }
+            DText { text: (Fq.t("New calendar")).toUpperCase(); color: root.cText; size: 30 }
 
             Flickable {
                 Layout.fillWidth: true
@@ -3453,7 +3526,7 @@ Item {
         ColumnLayout {
             anchors.fill: parent; spacing: Theme.spacing.small
 
-            DText { text: (Fq.t("Calendar settings")).toUpperCase(); color: root.cText; font.pixelSize: 30 }
+            DText { text: (Fq.t("Calendar settings")).toUpperCase(); color: root.cText; size: 30 }
 
             // scrollable body — this popup can get tall
             Flickable {
@@ -3730,7 +3803,7 @@ Item {
         onOpened: { joinLink.text = ""; root.joinIdentity = ""; root.joinAppear = "ctx"; root.joinBusy = false; root.refreshHd() }
         ColumnLayout {
             anchors.fill: parent; spacing: Theme.spacing.small
-            DText { text: (Fq.t("Join a shared calendar")).toUpperCase(); color: root.cText; font.pixelSize: 30 }
+            DText { text: (Fq.t("Join a shared calendar")).toUpperCase(); color: root.cText; size: 30 }
             FText { text: Fq.t("Paste the scala:// invite link"); color: root.cFaint; font.pixelSize: 12 }
             Field { id: joinLink; Layout.fillWidth: true; placeholderText: "scala://join?..." }
             FText { textFormat: Text.PlainText
@@ -3873,7 +3946,7 @@ Item {
         onOpened: qrCanvas.requestPaint()
         ColumnLayout {
             anchors.fill: parent; spacing: Theme.spacing.small
-            DText { id: shareTitle; text: ("").toUpperCase(); color: root.cText; font.pixelSize: 30 }
+            DText { id: shareTitle; text: ("").toUpperCase(); color: root.cText; size: 30 }
             FText { text: Fq.t("Scan this on the phone, or copy the link:"); color: root.cFaint; font.pixelSize: 12 }
             Rectangle {
                 Layout.alignment: Qt.AlignHCenter
@@ -3923,7 +3996,7 @@ Item {
         background: Rectangle { radius: 0; color: root.cSurface; border.width: 1; border.color: root.cSurface2 }
         ColumnLayout {
             anchors.fill: parent; spacing: Theme.spacing.small
-            DText { text: (Fq.t("Delete calendar?")).toUpperCase(); color: root.cText; font.pixelSize: 30 }
+            DText { text: (Fq.t("Delete calendar?")).toUpperCase(); color: root.cText; size: 30 }
             FText {
                 text: Fq.t("Remove \"") + (root.pendingDeleteCal ? (root.pendingDeleteCal.name || "calendar") : "") + Fq.t("\" from this device. Its local events are deleted. Peers who joined keep their own copy.")
                 color: root.cFaint; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true
@@ -3944,7 +4017,7 @@ Item {
         background: Rectangle { radius: 0; color: root.cSurface; border.width: 1; border.color: root.cSurface2 }
         ColumnLayout {
             anchors.fill: parent; spacing: Theme.spacing.small
-            DText { text: (Fq.t("Delete event?")).toUpperCase(); color: root.cText; font.pixelSize: 30 }
+            DText { text: (Fq.t("Delete event?")).toUpperCase(); color: root.cText; size: 30 }
             FText {
                 text: Fq.t("Delete \"") + (root.editingEvent ? (root.editingEvent.title || Fq.t("(untitled)")) : "")
                     + "\"" + ((root.editingEvent && root.editingEvent.recur) ? " and its whole repeating series" : "")
@@ -3972,7 +4045,7 @@ Item {
         onOpened: root.loadDiag()
         ColumnLayout {
             anchors.fill: parent; spacing: Theme.spacing.small
-            DText { text: (Fq.t("Diagnostics")).toUpperCase(); color: root.cText; font.pixelSize: 30 }
+            DText { text: (Fq.t("Diagnostics")).toUpperCase(); color: root.cText; size: 30 }
 
             RowLayout {
                 Layout.fillWidth: true; spacing: Theme.spacing.medium

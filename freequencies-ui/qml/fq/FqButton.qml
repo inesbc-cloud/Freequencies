@@ -18,7 +18,7 @@ Button {
     background: Rectangle {
         opacity: b.enabled ? 1 : 0.45
         color: b.primary ? (b.hovered ? Fq.acid : Fq.lime) : (b.down ? Fq.surface2 : b.hovered ? Fq.surface : "transparent")
-        border.width: b.primary ? 0 : 1
+        border.width: b.primary ? 0 : Fq.bw
         border.color: b.hovered || b.activeFocus ? Fq.lime : Fq.line
     }
 }

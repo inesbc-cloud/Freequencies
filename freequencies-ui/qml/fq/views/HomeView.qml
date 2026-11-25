@@ -14,6 +14,7 @@ Rectangle {
     objectName: "homeView"
     property var app
     color: Fq.ground
+    SkinDeco { anchors.fill: parent; strength: 0.6 }
     readonly property double now: app.nowTick
     readonly property var occs: app.expandEvents(app.freqNights, now - 86400000, now + 60 * 86400000)
     readonly property var items: Home.attention(occs, app.fundingAnchor, now, Fq.t)
@@ -36,7 +37,7 @@ Rectangle {
                 ColumnLayout {
                     spacing: -4
                     FText { text: Fq.fmtDate(new Date(hv.now), "dddd d MMMM").toUpperCase(); color: Fq.sub; font.pixelSize: 12; font.letterSpacing: 1.4 }
-                    DText { text: hv.items.length ? hv.items.length + (hv.items.length === 1 ? Fq.t(" THING NEEDS YOU") : Fq.t(" THINGS NEED YOU")) : Fq.t("ALL CALM"); font.pixelSize: 44; color: Fq.lime }
+                    DText { text: hv.items.length ? hv.items.length + (hv.items.length === 1 ? Fq.t(" THING NEEDS YOU") : Fq.t(" THINGS NEED YOU")) : Fq.t("ALL CALM"); size: 44; color: Fq.lime }
                 }
                 Item { Layout.fillWidth: true }
                 FqButton { text: Fq.t("+ Event"); primary: true; onClicked: hv.app.openQuickNight() }
@@ -54,7 +55,7 @@ Rectangle {
                         required property var modelData
                         Layout.fillWidth: true; Layout.preferredHeight: 84; color: Fq.mantle; border.width: 1; border.color: Fq.line
                         Column { x: 16; anchors.verticalCenter: parent.verticalCenter; spacing: -2
-                            DText { text: String(modelData.n); font.pixelSize: 40 }
+                            DText { text: String(modelData.n); size: 40 }
                             FText { text: modelData.l; color: Fq.sub; font.pixelSize: 12 } }
                     }
                 }
@@ -116,7 +117,7 @@ Rectangle {
                             RowLayout {
                                 id: upr
                                 x: 16; y: 9; width: parent.width - 28; spacing: 12
-                                DText { text: Fq.fmtDate(new Date(up.modelData.startTime), "dd.MM"); font.pixelSize: 30; Layout.alignment: Qt.AlignTop }
+                                DText { text: Fq.fmtDate(new Date(up.modelData.startTime), "dd.MM"); size: 30; Layout.alignment: Qt.AlignTop }
                                 ColumnLayout {
                                     Layout.fillWidth: true; spacing: 1
                                     FText { Layout.fillWidth: true; elide: Text.ElideRight; font.pixelSize: 14; font.bold: true; textFormat: Text.PlainText; text: up.modelData.title || Fq.t("(untitled)") }
