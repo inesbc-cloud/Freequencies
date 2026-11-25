@@ -85,5 +85,23 @@
         <file>fq/lib/listings.js</file>
         <file>fq/LisboaPanel.qml</file>
         <file>fq/popups/ListingPopup.qml</file>
+        <file>fq/lib/reports.js</file>
+        <file>fq/lib/deal.js</file>
+        <file>fq/popups/DealPopup.qml</file>
+        <file>fq/sections/CoproSection.qml</file>
+        <file>fq/sections/ResultsSection.qml</file>
+        <file>fq/views/ReportsView.qml</file>
+        <file>fq/SkinDeco.qml</file>
+        <file>fq/PixelSprite.qml</file>
+        <file>fq/lib/network.js</file>
+        <file>fq/popups/NetPopup.qml</file>
+        <file>fq/sections/PollCard.qml</file>
+        <file>fq/sections/PollsSection.qml</file>
+        <file>fq/views/NetworkView.qml</file>
+        <file>fq/lib/legal.js</file>
+        <file>fq/lib/legal-content.js</file>
+        <file>fq/views/ResourcesView.qml</file>
+        <file>fq/popups/InspectionPopup.qml</file>
+        <file>fq/popups/HelpPopup.qml</file>
     </qresource>
 </RCC>

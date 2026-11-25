@@ -41,7 +41,7 @@ ColumnLayout {
                     Layout.fillWidth: true; spacing: 8
                     RowLayout {
                         Layout.fillWidth: true; Layout.topMargin: 8; spacing: 12
-                        DText { text: Fq.fmtDate(new Date(grp.modelData.first), "MMMM yyyy").toUpperCase(); color: Fq.lime; font.pixelSize: 34 }
+                        DText { text: Fq.fmtDate(new Date(grp.modelData.first), "MMMM yyyy").toUpperCase(); color: Fq.lime; size: 34 }
                         Rectangle { Layout.fillWidth: true; height: 1; color: Fq.line }
                         FText { text: grp.modelData.occs.length + (grp.modelData.occs.length === 1 ? Fq.t(" event") : Fq.t(" events")); color: Fq.faint; font.pixelSize: 12 }
                     }
@@ -64,7 +64,7 @@ ColumnLayout {
                                 x: 20; y: 12; width: parent.width - 34; spacing: 18
                                 ColumnLayout {
                                     Layout.preferredWidth: 104; Layout.alignment: Qt.AlignTop; spacing: -6
-                                    DText { text: Fq.fmtDate(new Date(row.modelData.startTime), "dd.MM"); font.pixelSize: 50 }
+                                    DText { text: Fq.fmtDate(new Date(row.modelData.startTime), "dd.MM"); size: 50 }
                                     FText { text: Fq.fmtDate(new Date(row.modelData.startTime), "dddd").toUpperCase(); color: Fq.sub; font.pixelSize: 12; font.letterSpacing: 1.2 }
                                 }
                                 Rectangle {
@@ -76,7 +76,7 @@ ColumnLayout {
                                     Layout.fillWidth: true; Layout.alignment: Qt.AlignTop; spacing: 4
                                     RowLayout {
                                         Layout.fillWidth: true; spacing: 8
-                                        DText { Layout.fillWidth: true; elide: Text.ElideRight; font.pixelSize: 26; text: (row.modelData.title || Fq.t("(untitled)")).toUpperCase()
+                                        DText { Layout.fillWidth: true; elide: Text.ElideRight; size: 26; text: (row.modelData.title || Fq.t("(untitled)")).toUpperCase()
                                                 font.strikeout: Nights.fieldOf(row.m, "status") === "Cancelled" }
                                         Badge { visible: Nights.fieldOf(row.m, "status") !== ""; text: Fq.t(Nights.fieldOf(row.m, "status")); tone: tv.app.evColor(row.modelData) }
                                     }

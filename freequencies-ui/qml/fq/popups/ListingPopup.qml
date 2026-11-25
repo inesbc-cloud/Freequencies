@@ -16,7 +16,7 @@ Win {
     function openFor(occ) { ev = occ; open() }
 
     Badge { text: lp.src ? Fq.t("via ") + lp.src : Fq.t("public listing"); tone: Fq.pink }
-    DText { Layout.fillWidth: true; wrapMode: Text.Wrap; font.pixelSize: 34; text: lp.ev ? (lp.ev.title || "").toUpperCase() : "" }
+    DText { Layout.fillWidth: true; wrapMode: Text.Wrap; size: 34; text: lp.ev ? (lp.ev.title || "").toUpperCase() : "" }
     FText { Layout.fillWidth: true; wrapMode: Text.Wrap; font.pixelSize: 14
         text: lp.ev ? Fq.fmtDateTime(new Date(lp.ev.startTime), "dddd d MMMM · hh:mm") + (lp.ev.endTime > lp.ev.startTime ? "–" + Fq.fmtTime(new Date(lp.ev.endTime), "hh:mm") : "") : "" }
     FText { visible: !!lp.ev && Listings.venueOf(lp.ev) !== ""; Layout.fillWidth: true; wrapMode: Text.Wrap; color: Fq.sub; font.pixelSize: 13; textFormat: Text.PlainText

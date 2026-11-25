@@ -36,7 +36,7 @@ Flickable {
                     Layout.fillWidth: true; Layout.preferredHeight: 100; color: Fq.mantle; border.width: 1; border.color: Fq.line
                     Column { x: 14; y: 12; width: parent.width - 28; spacing: -2
                         FText { text: Fq.t(modelData.l).toUpperCase(); color: Fq.lime; font.pixelSize: 12; font.letterSpacing: 1.2 }
-                        DText { text: modelData.v; font.pixelSize: 38; width: parent.width; elide: Text.ElideRight }
+                        DText { text: modelData.v; size: 38; width: parent.width; elide: Text.ElideRight }
                         FText { text: modelData.x; color: Fq.faint; font.pixelSize: 12; width: parent.width; elide: Text.ElideRight } }
                 }
             }

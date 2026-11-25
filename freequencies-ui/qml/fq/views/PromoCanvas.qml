@@ -17,7 +17,7 @@ Rectangle {
     property string face: "display"    // "display" | "grotesk" | "mono"
     readonly property color ink: whiteText ? "#ffffff" : "#111111"
     readonly property color paper: whiteText ? "#2b2b2b" : "#f1efe9"
-    readonly property string bigFamily: face === "display" ? Fq.display : face === "mono" ? Fq.body : "Helvetica Neue"
+    readonly property string bigFamily: face === "display" ? Fq.bebas : face === "mono" ? Fq.body : "Helvetica Neue"
     readonly property string smallFamily: face === "mono" ? Fq.body : "Helvetica Neue"
     readonly property int m: 72
     width: 1080; height: 1350

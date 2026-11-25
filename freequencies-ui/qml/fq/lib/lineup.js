@@ -11,7 +11,8 @@ function lineupOf(ev) {
         if (!name) continue
         var fee = (typeof d.fee === "number" && isFinite(d.fee) && d.fee >= 0) ? d.fee : null, st = Ext.str(d.status)
         out.push({ id: Ext.str(x.id), author: Ext.str(x.author), name: name, contact: Ext.str(d.contact), book: Ext.str(d.book), fee: fee,
-                   currency: Ext.str(d.currency), set: Ext.str(d.set), status: bookingStatuses.indexOf(st) >= 0 ? st : "asked" })
+                   currency: Ext.str(d.currency), set: Ext.str(d.set), status: bookingStatuses.indexOf(st) >= 0 ? st : "asked",
+                   local: d.local === true, wnb: d.wnb === true, first: d.first === true })
     }
     out.sort(function (a, b) { return (a.set || "￿").localeCompare(b.set || "￿") || a.name.localeCompare(b.name) })
     return out
@@ -39,8 +40,10 @@ function setKey(set) {
 }
 function cap(st) { return st.charAt(0).toUpperCase() + st.slice(1) }
 // The data written for a booking, from the artist popup's fields.
-function bookingData(name, status, contact, book, fee, currency, set) {
+// flags (optional, for funder reports; private to the collective): { local, wnb, first }
+function bookingData(name, status, contact, book, fee, currency, set, flags) {
     var d = { name: name, status: status }
+    if (flags) { if (flags.local) d.local = true; if (flags.wnb) d.wnb = true; if (flags.first) d.first = true }
     if (contact) { d.contact = contact; d.book = book }
     if (fee !== null) { d.fee = fee; d.currency = currency }
     if (set) d.set = set

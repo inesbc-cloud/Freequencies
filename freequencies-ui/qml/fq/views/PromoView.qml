@@ -32,16 +32,20 @@ Rectangle {
     Settings { id: saved; category: "freequencies-promo"; property string logo: ""; property string logoText: "" }
 
     readonly property double now: app.nowTick
-    readonly property var nights: app.freqNights.filter(function (n) { return n.startTime > now - 7 * 86400000 })
+    // every calendar's events (not public listings); an event is optional: the fields below work on their own
+    readonly property var nights: app.events.filter(function (n) { return n.calendarId !== "fq-listings" && n.startTime > now - 7 * 86400000 })
                                     .sort(function (a, b) { return a.startTime - b.startTime })
-    readonly property var night: (nightId ? app.eventById(nightId) : null) || (nights.length ? nights[0] : null)
-    readonly property var lineup: night ? Lineup.lineupOf(night).filter(function (b) { return b.status !== "cancelled" })
+    property bool noEvent: false
+    readonly property var night: noEvent ? null : ((nightId ? app.eventById(nightId) : null) || (nights.length ? nights[0] : null))
+    readonly property var times: dateIn.text.trim() ? Details.timesOf(dateIn.text, startIn.text || "22:00", endIn.text) : null
+    readonly property var manualLineup: Details.parseLineup(lineupIn.text).map(function (n) { return { name: n, set: "" } })
+    readonly property var lineup: manualLineup.length ? manualLineup : night ? Lineup.lineupOf(night).filter(function (b) { return b.status !== "cancelled" })
                                           .map(function (b) { return { name: app.kithName(b), set: b.set } }) : []
     readonly property string curArtist: artist !== "" ? artist : (lineup.length ? lineup[0].name : "")
     readonly property var det: night ? Details.detailsOf(night) : ({})
     readonly property var filled: Promo.fill(tpl, {
-        title: titleIn.text !== "" ? titleIn.text : (night ? night.title : ""), venue: night ? Nights.fieldOf(night, "venue") : "",
-        start: night ? night.startTime : undefined, end: night ? night.endTime : undefined, lineup: lineup,
+        title: titleIn.text !== "" ? titleIn.text : (night ? night.title : ""), venue: venueIn.text.trim() !== "" ? venueIn.text.trim() : (night ? (Nights.fieldOf(night, "venue") || night.location || "") : ""),
+        start: times && !times.error ? times.start : (night ? night.startTime : undefined), end: times && !times.error ? times.end : (night ? night.endTime : undefined), lineup: lineup,
         artist: curArtist, extra: extraIn.text, ticket: ticket, price: priceIn.text !== "" ? priceIn.text : Details.priceLabel(det), lang: lang, now: now })
     readonly property string photoKey: tpl === "artist" ? curArtist : ""
 
@@ -88,7 +92,7 @@ Rectangle {
                     logo: saved.logo; logoText: saved.logoText
                 }
             }
-            FText { visible: !ps.night; anchors.centerIn: parent; text: Fq.t("Add an event first (+ Event), then make its posts here."); color: Fq.sub; font.pixelSize: 14 }
+            
         }
 
         // ── controls ──
@@ -102,14 +106,15 @@ Rectangle {
                 ColumnLayout {
                     id: ctl
                     width: parent.width - 8; spacing: 8
-                    DText { text: Fq.t("PROMO STUDIO"); font.pixelSize: 32; color: Fq.lime }
+                    DText { text: Fq.t("PROMO STUDIO"); size: 32; color: Fq.lime }
 
                     Label_ { text: Fq.t("EVENT") }
                     Flow { Layout.fillWidth: true; spacing: 6
+                        Chip { text: Fq.t("No event, I'll type it"); on: ps.noEvent; onClicked: ps.noEvent = !ps.noEvent }
                         Repeater { model: ps.nights.slice(0, 10)
                             delegate: Chip { required property int index; readonly property var n: ps.nights[index]
                                 text: Fq.fmtDate(new Date(n.startTime), "dd.MM") + " " + (n.title || "").slice(0, 22); on: ps.night && ps.night.id === n.id
-                                onClicked: { ps.nightId = n.id; ps.artist = ""; titleIn.text = "" } } } }
+                                onClicked: { ps.noEvent = false; ps.nightId = n.id; ps.artist = ""; titleIn.text = "" } } } }
 
                     Label_ { text: Fq.t("TEMPLATE") }
                     Flow { Layout.fillWidth: true; spacing: 6
@@ -158,7 +163,19 @@ Rectangle {
                         Chip { text: Fq.t("PT"); on: ps.lang === "pt"; onClicked: ps.lang = "pt" } }
 
                     Label_ { text: Fq.t("NAME OF THE EVENT") }
-                    Field { id: titleIn; Layout.fillWidth: true; placeholderText: ps.night ? ps.night.title : "" }
+                    Field { id: titleIn; Layout.fillWidth: true; placeholderText: ps.night ? ps.night.title : Fq.t("What's the event called?") }
+                    RowLayout {
+                        Layout.fillWidth: true; spacing: 8
+                        ColumnLayout { Layout.fillWidth: true; spacing: 4; Label_ { text: Fq.t("DATE") }
+                            Field { id: dateIn; Layout.fillWidth: true; placeholderText: ps.night ? Fq.fmtDate(new Date(ps.night.startTime), "yyyy-MM-dd") : "2026-12-17" } }
+                        ColumnLayout { spacing: 4; Label_ { text: Fq.t("STARTS") } Field { id: startIn; Layout.preferredWidth: 76; placeholderText: ps.night ? Fq.fmtTime(new Date(ps.night.startTime), "hh:mm") : "22:00" } }
+                        ColumnLayout { spacing: 4; Label_ { text: Fq.t("ENDS") } Field { id: endIn; Layout.preferredWidth: 76; placeholderText: ps.night ? Fq.fmtTime(new Date(ps.night.endTime), "hh:mm") : "04:00" } }
+                    }
+                    FText { visible: !!ps.times && !!ps.times.error; Layout.fillWidth: true; wrapMode: Text.Wrap; color: Fq.warn; font.pixelSize: 11; text: ps.times && ps.times.error ? Fq.t(ps.times.error) : "" }
+                    Label_ { text: Fq.t("VENUE") }
+                    Field { id: venueIn; Layout.fillWidth: true; placeholderText: ps.night ? (Nights.fieldOf(ps.night, "venue") || ps.night.location || Fq.t("Where it happens")) : Fq.t("Where it happens") }
+                    Label_ { text: Fq.t("LINE-UP") }
+                    Field { id: lineupIn; Layout.fillWidth: true; placeholderText: ps.lineup.length && !ps.manualLineup.length ? ps.lineup.map(function (b) { return b.name }).join(", ") : Fq.t("Names, separated by commas (optional)") }
                     ColumnLayout {
                         visible: ps.tpl === "tickets"; Layout.fillWidth: true; spacing: 6
                         Flow { Layout.fillWidth: true; spacing: 6
@@ -171,8 +188,8 @@ Rectangle {
                     Label_ { text: Fq.t("EXTRA LINE (OPTIONAL)") }
                     Field { id: extraIn; Layout.fillWidth: true; placeholderText: ps.tpl === "thanks" ? Fq.t("e.g. see you in January") : Fq.t("e.g. live from the studio") }
 
-                    FqButton { objectName: "promoSave"; Layout.fillWidth: true; Layout.topMargin: 6; text: Fq.t("Download PNG"); primary: true; enabled: !!ps.night && !batchTimer.running
-                        onClicked: { saveDialog.currentFile = "file://" + StandardPaths.writableLocation(StandardPaths.DownloadLocation).toString().replace(/^file:\/\//, "") + "/" + Promo.fileName(ps.tpl, ps.night.title, ps.curArtist, ps.size); saveDialog.open() } }
+                    FqButton { objectName: "promoSave"; Layout.fillWidth: true; Layout.topMargin: 6; text: Fq.t("Download PNG"); primary: true; enabled: !batchTimer.running
+                        onClicked: { saveDialog.currentFile = "file://" + StandardPaths.writableLocation(StandardPaths.DownloadLocation).toString().replace(/^file:\/\//, "") + "/" + Promo.fileName(ps.tpl, titleIn.text || (ps.night ? ps.night.title : ""), ps.curArtist, ps.size); saveDialog.open() } }
                     FqButton { visible: ps.tpl === "artist" && ps.lineup.length > 1; Layout.fillWidth: true; enabled: !batchTimer.running
                         text: batchTimer.running ? Fq.t("Saving ") + ps.batch.length + Fq.t(" left…") : Fq.t("Download all ") + ps.lineup.length + Fq.t(" artist cards"); onClicked: folderDialog.open() }
 

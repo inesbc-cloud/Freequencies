@@ -38,7 +38,7 @@ Flickable {
                 ColumnLayout {
                     id: setupCol
                     x: 16; y: 16; width: parent.width - 32; spacing: 8
-                    DText { text: Fq.t("NO FUNDING LIBRARY YET"); font.pixelSize: 28 }
+                    DText { text: Fq.t("NO FUNDING LIBRARY YET"); size: 28 }
                     FText { Layout.fillWidth: true; wrapMode: Text.Wrap; color: Fq.sub; font.pixelSize: 13
                         text: Fq.t("Start one for your collective. It's a shared calendar of its own: invite people to it and they can read and add applications and links. Documents are sealed in Logos Storage, so only members can open them.") }
                     FText { Layout.fillWidth: true; wrapMode: Text.Wrap; color: Fq.faint; font.pixelSize: 12
@@ -78,7 +78,7 @@ Flickable {
                         x: 18; y: 14; width: parent.width - 32; spacing: 4
                         RowLayout {
                             Layout.fillWidth: true; spacing: 8
-                            DText { Layout.fillWidth: true; elide: Text.ElideRight; font.pixelSize: 26; text: (ac.d.title || "").toUpperCase() }
+                            DText { Layout.fillWidth: true; elide: Text.ElideRight; size: 26; text: (ac.d.title || "").toUpperCase() }
                             Badge { visible: !!ac.d.year; text: ac.d.year ? String(ac.d.year) : "" }
                         }
                         FText { Layout.fillWidth: true; wrapMode: Text.Wrap; font.pixelSize: 13; textFormat: Text.PlainText

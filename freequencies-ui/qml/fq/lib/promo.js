@@ -62,7 +62,7 @@ function up(s) { return Ext.str(s).toUpperCase() }
 // Returns { kicker, big, lines: [..], rows: [[time, name]], foot }
 function fill(tpl, f) {
     f = f || {}
-    var w = W(f.lang), title = up(f.title) || "NAME OF THE EVENT"
+    var w = W(f.lang), title = up(f.title) || (f.lang === "pt" ? "NOME DO EVENTO" : "NAME OF THE EVENT")
     var when = whenLine(f.start, f.end, f.lang), venue = up(f.venue)
     var foot = [when, venue].filter(function (x) { return !!x }).join("\n")
     var names = (f.lineup || []).map(function (b) { return up(b.name) }).filter(function (x) { return !!x })

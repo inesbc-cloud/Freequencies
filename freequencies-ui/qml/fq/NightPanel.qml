@@ -43,8 +43,8 @@ Rectangle {
                         FText { text: "✕"; color: Fq.ink; font.pixelSize: 16
                             MouseArea { anchors.fill: parent; anchors.margins: -8; cursorShape: Qt.PointingHandCursor; onClicked: panel.app.selectedNight = null } }
                     }
-                    DText { text: panel.occ ? Fq.fmtDate(new Date(panel.occ.startTime), "dd.MM") : ""; color: Fq.ink; font.pixelSize: 72; Layout.topMargin: -4 }
-                    DText { text: panel.night ? (panel.night.title || Fq.t("(untitled)")).toUpperCase() : ""; color: Fq.ink; font.pixelSize: 32; wrapMode: Text.Wrap; Layout.fillWidth: true; Layout.topMargin: -10 }
+                    DText { text: panel.occ ? Fq.fmtDate(new Date(panel.occ.startTime), "dd.MM") : ""; color: Fq.ink; size: 72; Layout.topMargin: -4 }
+                    DText { text: panel.night ? (panel.night.title || Fq.t("(untitled)")).toUpperCase() : ""; color: Fq.ink; size: 32; wrapMode: Text.Wrap; Layout.fillWidth: true; Layout.topMargin: -10 }
                     FText {
                         Layout.fillWidth: true; wrapMode: Text.Wrap; color: Fq.ink; font.pixelSize: 13
                         text: panel.occ ? Fq.fmtDate(new Date(panel.occ.startTime), "dddd") + "  ·  "
@@ -89,6 +89,7 @@ Rectangle {
                 }
                 QuickFields { app: panel.app; night: panel.night; canEdit: panel.canEdit }
                 DetailsSection { app: panel.app; night: panel.night; canEdit: panel.canEdit }
+                ResultsSection { app: panel.app; night: panel.night }
                 RepeatSection { app: panel.app; night: panel.night; canEdit: panel.canEdit }
                 TagsSection { app: panel.app; night: panel.night; canEdit: panel.canEdit }
                 LineupSection { app: panel.app; night: panel.night; canEdit: panel.canEdit; onEditArtist: function (b) { artistPopup.openFor(b) } }
@@ -130,6 +131,7 @@ Rectangle {
                 }
                 PublicSection { app: panel.app; night: panel.night; canEdit: panel.canEdit; onMakePublic: publicPopup.open() }
                 FormsSection { app: panel.app; night: panel.night; canEdit: panel.canEdit; onAddForm: formPopup.open(); onOpenAnswers: function (f) { responsesPopup.openFor(f) } }
+                PollsSection { app: panel.app; night: panel.night; canEdit: panel.canEdit }
                 NotesSection { app: panel.app; night: panel.night; canEdit: panel.canEdit }
             }
         }

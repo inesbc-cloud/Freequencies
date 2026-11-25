@@ -40,7 +40,7 @@ ColumnLayout {
                     delegate: Item {
                         required property var modelData
                         width: bv.cellW; height: 32
-                        DText { x: 6; width: bv.cellW - 12; anchors.verticalCenter: parent.verticalCenter; elide: Text.ElideRight; font.pixelSize: 20
+                        DText { x: 6; width: bv.cellW - 12; anchors.verticalCenter: parent.verticalCenter; elide: Text.ElideRight; size: 20
                                 text: Fq.t(parent.modelData.label).toUpperCase() }
                     }
                 }
@@ -59,7 +59,7 @@ ColumnLayout {
                         Column {
                             x: 8; anchors.verticalCenter: parent.verticalCenter; spacing: -3
                             FText { text: Fq.fmtDate(new Date(dayRow.modelData.date), "ddd").toUpperCase(); color: dayRow.isToday ? Fq.lime : Fq.faint; font.pixelSize: 12; font.letterSpacing: 1.2 }
-                            DText { text: Fq.fmtDate(new Date(dayRow.modelData.date), "dd.MM"); color: dayRow.isToday ? Fq.lime : Fq.sub; font.pixelSize: 22 }
+                            DText { text: Fq.fmtDate(new Date(dayRow.modelData.date), "dd.MM"); color: dayRow.isToday ? Fq.lime : Fq.sub; size: 22 }
                         }
                     }
                     Row {

@@ -18,7 +18,7 @@ ColumnLayout {
         text: Fq.t("No ticket link yet. Paste one from Luma, 3cket, Shotgun… and keep the numbers here.") }
     RowLayout {
         visible: !!tk.t; Layout.fillWidth: true; spacing: 10
-        DText { text: tk.t && tk.t.sold !== undefined ? String(tk.t.sold) : "—"; font.pixelSize: 40; color: Fq.lime }
+        DText { text: tk.t && tk.t.sold !== undefined ? String(tk.t.sold) : "—"; size: 40; color: Fq.lime }
         ColumnLayout {
             Layout.fillWidth: true; spacing: 4
             FText { text: Tickets.line(tk.t); color: Fq.text; font.pixelSize: 13 }

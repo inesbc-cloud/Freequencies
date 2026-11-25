@@ -46,7 +46,7 @@ Rectangle {
             Rectangle { anchors.right: parent.right; width: 1; height: parent.height; color: Fq.line }
             ColumnLayout {
                 anchors.fill: parent; anchors.margins: 14; spacing: 8
-                DText { text: Fq.t("PRODUCTION"); font.pixelSize: 34; color: Fq.lime }
+                DText { text: Fq.t("PRODUCTION"); size: 34; color: Fq.lime }
                 FText { Layout.fillWidth: true; wrapMode: Text.Wrap; color: Fq.sub; font.pixelSize: 12; text: Fq.t("A working plan for each event, shared with everyone organising it.") }
                 FText { visible: pv.nights.length === 0; Layout.fillWidth: true; wrapMode: Text.Wrap; color: Fq.sub; font.pixelSize: 13; text: Fq.t("No events yet. Add one with + Event.") }
                 Flickable {
@@ -74,7 +74,7 @@ Rectangle {
                             x: 10; y: 7; width: parent.width - 20; spacing: 2
                             RowLayout {
                                 Layout.fillWidth: true; spacing: 8
-                                DText { text: Fq.fmtDate(new Date(nr.modelData.startTime), "dd.MM"); font.pixelSize: 22; color: nr.modelData.startTime < pv.now ? Fq.faint : Fq.text }
+                                DText { text: Fq.fmtDate(new Date(nr.modelData.startTime), "dd.MM"); size: 22; color: nr.modelData.startTime < pv.now ? Fq.faint : Fq.text }
                                 FText { Layout.fillWidth: true; elide: Text.ElideRight; font.pixelSize: 13; textFormat: Text.PlainText; text: nr.modelData.title || Fq.t("(untitled)") }
                             }
                             FText { Layout.fillWidth: true; elide: Text.ElideRight; color: Fq.sub; font.pixelSize: 11
@@ -108,7 +108,7 @@ Rectangle {
                         Layout.fillWidth: true; spacing: -4
                         FText { text: pv.night ? Fq.fmtDate(new Date(pv.night.startTime), "dddd d MMMM yyyy").toUpperCase() + "  ·  " + (Nights.fieldOf(pv.night, "venue") || Fq.t("no venue")) : ""
                             color: Fq.sub; font.pixelSize: 12; font.letterSpacing: 1.2 }
-                        DText { Layout.fillWidth: true; elide: Text.ElideRight; text: pv.night ? (pv.night.title || Fq.t("(untitled)")).toUpperCase() : ""; font.pixelSize: 40 }
+                        DText { Layout.fillWidth: true; elide: Text.ElideRight; text: pv.night ? (pv.night.title || Fq.t("(untitled)")).toUpperCase() : ""; size: 40 }
                     }
                     Badge { visible: !!pv.plan; text: pv.plan ? Fq.t(Production.FORMATS[pv.plan.format].label) : "" }
                     Link { text: Fq.t("open in calendar"); onClicked: pv.app.openOccurrence(pv.night) }
@@ -136,7 +136,7 @@ Rectangle {
                                 ColumnLayout {
                                     id: fcc
                                     x: 14; y: 13; width: parent.width - 28; spacing: 3
-                                    DText { text: Fq.t(fc.f.label).toUpperCase(); font.pixelSize: 24 }
+                                    DText { text: Fq.t(fc.f.label).toUpperCase(); size: 24 }
                                     FText { Layout.fillWidth: true; wrapMode: Text.Wrap; color: Fq.sub; font.pixelSize: 12; text: Fq.t(fc.f.blurb) }
                                     FText { Layout.fillWidth: true; wrapMode: Text.Wrap; color: Fq.faint; font.pixelSize: 11
                                         text: fc.f.modules.length + Fq.t(" modules · ") + fc.f.milestones.length + Fq.t(" milestones") }
@@ -195,6 +195,10 @@ Rectangle {
                     LineupSection { visible: pv.curDef && pv.curDef.section === "lineup"; app: pv.app; night: pv.night; canEdit: pv.canEdit; onEditArtist: function (b) { artistPopup.openFor(b) } }
                     CrewSection { visible: pv.curDef && pv.curDef.section === "crew"; app: pv.app; night: pv.night; canEdit: pv.canEdit; onEditCrew: function (c) { crewPopup.openFor(c) } }
                     BudgetSection { visible: pv.curDef && pv.curDef.section === "budget"; app: pv.app; night: pv.night; canEdit: pv.canEdit; onEditLine: function (l) { itemPopup.openFor("budget", l) } }
+                    RowLayout { visible: pv.curDef && pv.curDef.section === "budget"; spacing: 10
+                        FqButton { text: Fq.t("Deal calculator"); onClicked: dealPopup.openFor(pv.night) }
+                        FText { color: Fq.faint; font.pixelSize: 12; text: Fq.t("Model the artist's deal and see where you break even.") } }
+                    CoproSection { visible: pv.curDef && pv.curDef.section === "budget"; app: pv.app; night: pv.night; canEdit: pv.canEdit }
                     TicketsSection { visible: pv.curDef && pv.curDef.section === "tickets"; app: pv.app; night: pv.night; canEdit: pv.canEdit; onEditTickets: ticketsPopup.openFor() }
                     FilesSection { visible: pv.curDef && pv.curDef.section === "files"; app: pv.app; night: pv.night; canEdit: pv.canEdit; onUpload: fileDialog.open() }
                     ChecklistSection {
@@ -220,6 +224,8 @@ Rectangle {
     }
 
     RowPopup { id: rowPopup; app: pv.app }
+    DealPopup { id: dealPopup; app: pv.app }
+    property alias dlgDeal: dealPopup
     ArtistPopup { id: artistPopup; app: pv.app; night: pv.night }
     CrewPopup { id: crewPopup; app: pv.app; night: pv.night }
     TicketsPopup { id: ticketsPopup; app: pv.app; night: pv.night }

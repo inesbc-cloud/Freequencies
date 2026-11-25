@@ -50,7 +50,7 @@ ColumnLayout {
                 border.color: result ? (modelData.v >= 0 ? Fq.lime : Fq.red) : Fq.line
                 Column { x: 8; anchors.verticalCenter: parent.verticalCenter; spacing: -3
                     FText { text: Fq.t(modelData.l).toUpperCase(); color: Fq.faint; font.pixelSize: 12; font.letterSpacing: 1.2 }
-                    DText { text: Money.money(modelData.v, bs.mo.cur); font.pixelSize: 22; color: parent.parent.result ? (modelData.v >= 0 ? Fq.lime : Fq.red) : Fq.text } }
+                    DText { text: Money.money(modelData.v, bs.mo.cur); size: 22; color: parent.parent.result ? (modelData.v >= 0 ? Fq.lime : Fq.red) : Fq.text } }
             }
         }
     }

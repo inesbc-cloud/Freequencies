@@ -75,6 +75,8 @@ function detailsData(f) {
     }
     var age = clean(f.age, 20); if (age) d.age = age
     var acc = clean(f.access, 400); if (acc) d.access = acc
+    var oc = clean(f.onCall, 80); if (oc) d.onCall = oc          // on-call contact for the night (HELP)
+    var lw = clean(f.lawyer, 80); if (lw) d.lawyer = lw          // a lawyer to call (HELP)
     var link = clean(f.link, 400)
     if (link) {
         if (!/^https?:\/\/\S+$/i.test(link)) return { error: "The link should start with https://" }

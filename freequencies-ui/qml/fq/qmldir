@@ -15,3 +15,5 @@ Win 1.0 Win.qml
 Label_ 1.0 Label_.qml
 FilterBar 1.0 FilterBar.qml
 LisboaPanel 1.0 LisboaPanel.qml
+SkinDeco 1.0 SkinDeco.qml
+PixelSprite 1.0 PixelSprite.qml

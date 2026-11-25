@@ -9,6 +9,7 @@
 // Anyone may edit any row: an edit posts a new version, and the newest version of each row wins
 // (deleting is a version with del: true). Pure functions, no Qt.
 .import "ext.js" as Ext
+.import "legal-content.js" as LC
 
 var DAY = 86400000
 
@@ -132,6 +133,8 @@ function seedPlan(format, tr) {
     for (var i = 0; i < ms.length; i++) add("milestones", { t: ms[i].t, task: tr(ms[i].task), owner: "", done: false })
     var r = f.rows || {}
     for (var v = 0; v < (r.venue || []).length; v++) add("venue", { item: tr(r.venue[v]), owner: "", status: "To check", notes: "" })
+    // the papers most events need (Resources → Legal toolkit → Papers for an event)
+    if (f.modules.indexOf("venue") >= 0) for (var lr = 0; lr < LC.LICENCE_ROWS.length; lr++) add("permits", { item: tr(LC.LICENCE_ROWS[lr].en), who: "", due: "", status: "Not started" })
     for (var o = 0; o < (r.ros || []).length; o++) add("ros", { time: r.ros[o][0], what: tr(r.ros[o][1]), who: "", where: "" })
     for (var k = 0; k < (r.risks || []).length; k++) add("risks", { risk: tr(r.risks[k][0]), l: r.risks[k][1], i: r.risks[k][2], plan: tr(r.risks[k][3]), owner: "", status: "Open" })
     add("debrief", { topic: tr("Attendance"), worked: "", change: "", owner: "" })

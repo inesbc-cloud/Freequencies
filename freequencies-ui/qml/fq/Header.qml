@@ -9,16 +9,13 @@ Rectangle {
     property int overdue: 0          // overdue tasks across all nights (#16)
     color: Fq.ground
     clip: true
-    Repeater {
-        model: Math.ceil(hdr.height / 4)
-        delegate: Rectangle { required property int index; y: index * 4 + 3; width: hdr.width; height: 1; color: Fq.lime; opacity: 0.05 }
-    }
+    SkinDeco { anchors.fill: parent }
     RowLayout {
         anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16; spacing: 12
         Image { source: "dish.png"; Layout.preferredWidth: 40; Layout.preferredHeight: 40; fillMode: Image.PreserveAspectFit; smooth: false }
         ColumnLayout {
             spacing: -6
-            DText { text: Fq.t("FREEQUENCIES"); color: Fq.lime; font.pixelSize: 40 }
+            DText { text: Fq.t("FREEQUENCIES"); color: Fq.lime; size: 40 }
             FText { visible: hdr.width > 1500; text: Fq.t("( coordination tool · lisboa )"); color: Fq.sub; font.pixelSize: 12; font.letterSpacing: 1 }
         }
         Item { Layout.fillWidth: true }
